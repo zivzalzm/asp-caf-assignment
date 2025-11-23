@@ -49,6 +49,7 @@ PYBIND11_MODULE(_libcaf, m) {
 
     py::class_<Tree>(m, "Tree")
     .def(py::init<const std::unordered_map<std::string, TreeRecord>&>())
+    .def(py::init<const std::map<std::string, TreeRecord>&>()) //added
     .def_readonly("records", &Tree::records);
 
     py::class_<Commit>(m, "Commit")
