@@ -133,12 +133,14 @@ class Repository:
         :return: The path to the heads directory."""
         return self.refs_dir() / HEADS_DIR
     
-    """" ADDED IN TASK 5 """
+    #  -----------------------  ADDED IN TASK 5 -----------------------  
     def tags_dir(self) -> Path:
         """Get the path to the heads directory within the repository.
 
         :return: The path to the tags directory."""
         return self.refs_dir() / TAGS_DIR
+    
+    #  -----------------------  ADDED IN TASK 5 -----------------------  
 
 
     @staticmethod
@@ -159,7 +161,7 @@ class Repository:
 
         return _verify_repo
 
-    """"  --------------------------- ADDED IN TASK 5 ---------------------------  """
+    #  --------------------------- ADDED IN TASK 5 ---------------------------  
     @requires_repo
     def create_tag(self, name: str, commit_hash: str) -> None:
         """ Create a new lightweight tag that points to a given commit hash.
@@ -254,7 +256,7 @@ class Repository:
         return tags
 
 
-    """"  --------------------------- ADDED IN TASK 5 ---------------------------  """
+    #  --------------------------- ADDED IN TASK 5 ---------------------------  
 
     @requires_repo
     def head_ref(self) -> Ref | None:

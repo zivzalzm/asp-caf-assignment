@@ -6,7 +6,7 @@ from libcaf.ref import HashRef, read_ref
 from libcaf.constants import HASH_LENGTH
 
 
-""""  --------------------------- create_tag_tests ---------------------------  """
+#  --------------------------- create_tag_tests ---------------------------  
 
 def test_create_tag_creates_ref_for_existing_commit(tmp_path: Path) -> None:
     """ create_tag should creat a tag ref file pointing to an existing commit. """
@@ -109,10 +109,10 @@ def test_create_tag_requires_non_empty_name(tmp_path: Path) -> None:
 
     assert 'Tag name is required' in str(excinfo.value)
 
-""""  --------------------------- create_tag_tests ---------------------------  """
+#  --------------------------- create_tag_tests ---------------------------  
 
 
-""""  --------------------------- delete_tag_tests ---------------------------  """
+#  --------------------------- delete_tag_tests ---------------------------  
 
 def test_delete_tag_removes_existing_tag(tmp_path: Path) -> None:
     """delete_tag should remove an existing tag ref file."""
@@ -161,10 +161,10 @@ def test_delete_tag_requires_non_empty_name(tmp_path: Path) -> None:
 
     assert 'Tag name is required' in str(excinfo.value)
 
-""""  --------------------------- delete_tag_tests ---------------------------  """
+#  --------------------------- delete_tag_tests ---------------------------  
 
 
-""""  --------------------------- list_tags_tests ---------------------------  """
+#  --------------------------- list_tags_tests ---------------------------  
 
 def test_list_tags_returns_empty_list_when_no_tags(tmp_path: Path) -> None:
     """list_tags should return an empty list when no tags exist."""
@@ -223,4 +223,4 @@ def test_list_tags_returns_multiple_tags(tmp_path: Path) -> None:
     for expected in tag_names:
         assert expected in returned_names
 
-""""  --------------------------- list_tags_tests ---------------------------  """
+#  --------------------------- list_tags_tests ---------------------------  

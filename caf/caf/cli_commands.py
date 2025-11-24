@@ -275,3 +275,101 @@ def _print_diffs(diff_stack: MutableSequence[tuple[Sequence[Diff], int]]) -> Non
 
             if diff.children:
                 diff_stack.append((diff.children, indent + 3))
+
+
+## --------------------------- ADDED IN TASK 5: ---------------------------
+
+def create_tag(
+        working_dir_path: str,
+        repo_dir: str,
+        tag_name: str,
+        commit_hash: str,
+        command: str | None = None,
+) -> int:
+    
+    """CLI command: create a new lightweight tag in the repository.
+
+    :param working_dir_path: Path to the working directory.
+    :param repo_dir: Name of the repository directory (e.g., ".caf").
+    :param tag_name: Name of the tag to create.
+    :param commit_hash: Commit hash that the tag should point to.
+    :return: Process exit code (0 on success, non-zero on error).
+    """
+    repo = Repository(working_dir=working_dir_path, repo_dir=repo_dir)
+
+    try:
+        repo.create_tag(tag_name, commit_hash)
+        print(f'Created tag "{tag_name}" -> {commit_hash}')
+        return 0
+    except (RepositoryError, RepositoryNotFoundError) as e:
+        # Expected repository-related errors
+        print(str(e), file=sys.stderr)
+        return 1
+    except Exception as e: # Defensive: unexpected errors
+        print(f"Unexpected error while creating tag: {e}", file=sys.stderr)
+        return 1
+    
+
+def delete_tag(
+        working_dir_path: str,
+        repo_dir: str,
+        tag_name: str,
+        command: str | None = None,
+) -> int:
+        
+    """CLI command: delete an existing tag from the repository.
+
+
+    :param working_dir_path: Path to the working directory.
+    :param repo_dir: Name of the repository directory (e.g., ".caf").
+    :param tag_name: Name of the tag to delete.
+    :return: Process exit code (0 on success, non-zero on error).
+    """
+    repo = Repository(working_dir=working_dir_path, repo_dir=repo_dir)
+
+    try:
+        repo.delete_tag(tag_name)
+        print(f'Deleted tag "{tag_name}"')
+        return 0
+    except (RepositoryError, RepositoryNotFoundError) as e:
+        # Tag does not exist, or repository is missing
+        print(str(e), file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Unexpected error while deleting tag: {e}", file=sys.stderr)
+        return 1
+    
+
+def tags(
+   working_dir_path: str,
+   repo_dir: str,  
+   command: str | None = None,   
+) -> int:
+    """CLI command: list all tags in the repository.
+
+    :param working_dir_path: Path to the working directory.
+    :param repo_dir: Name of the repository directory (e.g., ".caf").
+    :return: Process exit code (0 on success, non-zero on error).
+    """
+    repo = Repository(working_dir=working_dir_path, repo_dir=repo_dir)
+
+    try:
+        tag_entries = repo.list_tags()
+
+        if not tag_entries:
+            print("No tags found.")
+            return 0
+        
+        # Print each tag name and the commit hash it points to
+        for name, commit_ref in tag_entries:
+            print(f"{name} {commit_ref}")
+
+        return 0
+    except (RepositoryError, RepositoryNotFoundError) as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Unexpected error while listing tags: {e}", file=sys.stderr)
+        return 1
+    
+## --------------------------- ADDED IN TASK 5: ---------------------------
