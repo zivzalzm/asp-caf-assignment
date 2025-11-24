@@ -164,5 +164,63 @@ def test_delete_tag_requires_non_empty_name(tmp_path: Path) -> None:
 """"  --------------------------- delete_tag_tests ---------------------------  """
 
 
+""""  --------------------------- list_tags_tests ---------------------------  """
+
+def test_list_tags_returns_empty_list_when_no_tags(tmp_path: Path) -> None:
+    """list_tags should return an empty list when no tags exist."""
+    repo = Repository(working_dir=tmp_path)
+    repo.init()
+
+    tags = repo.list_tags()
+
+    assert tags == []
 
 
+def test_list_tags_returns_single_tag_with_correct_name_and_hash(tmp_path: Path) -> None:
+    """list_tags should return a single (name, HashRef) tuple for one existing tag."""
+    repo = Repository(working_dir=tmp_path)
+    repo.init()
+
+    work_file = tmp_path / "file.txt"
+    work_file.write_text("content for list_tags test")
+
+    commit_ref = repo.commit_working_dir(author="tester", message="commit for list_tags")
+    tag_name = "v1.0"
+
+    repo.create_tag(tag_name, str(commit_ref))
+
+    tags = repo.list_tags()
+
+    assert len(tags) == 1
+    name, ref = tags[0]
+
+    assert name == tag_name
+    assert isinstance(ref, HashRef)
+    assert ref == commit_ref
+
+
+
+def test_list_tags_returns_multiple_tags(tmp_path: Path) -> None:
+    """list_tags should return all existing tags with their commit hashes."""
+    repo = Repository(working_dir=tmp_path)
+    repo.init()
+
+    work_file = tmp_path / "file.txt"
+    work_file.write_text("content for multiple tags")
+
+    commit_ref = repo.commit_working_dir(author="tester", message="base commit")
+
+    tag_names = ["v1.0", "v1.1", "release-candidate"]
+    for name in tag_names:
+        repo.create_tag(name, str(commit_ref))
+
+    tags = repo.list_tags()
+
+    # We expect exactly len(tag_names) tags
+    assert len(tags) == len(tag_names)
+
+    returned_names = {name for (name, _ref) in tags}
+    for expected in tag_names:
+        assert expected in returned_names
+
+""""  --------------------------- list_tags_tests ---------------------------  """

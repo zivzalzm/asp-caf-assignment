@@ -219,6 +219,41 @@ class Repository:
         # Remove the tag ref file from the filesystem
         tag_path.unlink()
 
+
+    @requires_repo
+    def list_tags(self) -> list[tuple[str, HashRef]]:
+        """List all tags in the repository and the commit hashes they point to.
+
+        Each tag is represented as a tuple ``(name, commit_ref)``, where
+        ``name`` is the tag name (the file name under ``refs/tags``) and
+        ``commit_ref`` is a HashRef that stores the commit hash.
+
+        If the tags directory does not exist, an empty list is returned.
+
+        :return: A list of (tag name, commit HashRef) tuples.
+        :raises RepositoryNotFoundError: If the repository does not exist."""
+        tag_dir = self.tags_dir()
+
+        # If no tags have been created yet, the directory might not exist.
+        if not tag_dir.exists() or not tag_dir.is_dir():
+            return []
+        
+        tags: list[tuple[str, HashRef]] = []
+
+        # Iterate over all files under ref/tags; each file name is a tag name.
+        for tag_file in tag_dir.iterdir():
+            if not tag_file.is_file():
+                continue
+
+            #read_ref returns a Ref object; for tag fiels we expect a HashRef
+            ref = read_ref(tag_file)
+
+            if isinstance(ref, HashRef):
+                tags.append((tag_file.name, ref))
+
+        return tags
+
+
     """"  --------------------------- ADDED IN TASK 5 ---------------------------  """
 
     @requires_repo
