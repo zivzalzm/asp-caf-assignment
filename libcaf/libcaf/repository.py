@@ -159,6 +159,43 @@ class Repository:
 
         return _verify_repo
 
+    """" ADDED IN TASK 5 """
+    @requires_repo
+    def create_tag(self, name: str, commit_hash: str) -> None:
+        """ Create a new lightweight tag that points to a given commit hash.
+
+        :param name: The tag name to create.
+        :param commit_hash: The commit hash that the tag should point to.
+        :raises ValueError: If the tag name is empty.
+        :raises RepositoryError: If the tag already exists or the commit does not exist.
+        :raises RepositoryNotFoundError: If the repository does not exist."""
+
+        if not name:
+            msg = 'Tag name is required'
+            raise ValueError(msg)
+        
+        # Ensure that the tags directory exists (create it if necessary)
+        tags_dir = self.tags_dir()
+        tags_dir.mkdir(parents = True, exist_ok = True)
+
+        tag_path = tags_dir / name
+
+        # Do not allow overwriting an existing tag with the same name
+        if tag_path.exists():
+            msg = f'Tag "{name}" already exists'
+            raise RepositoryError(msg)
+        
+        # Validate that the given commit hash refers to an existing commit
+        try:
+            # load_commit expects the objects directory and a HashRef
+            load_commit(self.objects_dir(), HashRef(commit_hash))
+        except Exception as e:
+            msg = f'Commit "{commit_hash}" does not exist'
+            raise RepositoryError(msg) from e
+        
+        # Store the commit hash as a HashRef in the tag ref file
+        write_ref(tag_path, HashRef(commit_hash))
+
     @requires_repo
     def head_ref(self) -> Ref | None:
         """Get the current HEAD reference of the repository.
