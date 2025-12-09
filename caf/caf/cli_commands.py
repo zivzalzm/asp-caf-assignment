@@ -276,6 +276,30 @@ def _print_diffs(diff_stack: MutableSequence[tuple[Sequence[Diff], int]]) -> Non
             if diff.children:
                 diff_stack.append((diff.children, indent + 3))
 
+## -------------------------- Implement marge ------------------------
+def is_ancestor(repo: Repository, ancestor_hash: str, commit_hash: str)-> bool:
+    """
+    Returns True if ancestor_hash is found in the parent chain of commit_hash.
+    In our simple merge model, we follw only parents[0]
+    """
+
+    current = commit_hash
+
+    while current:
+        if current == ancestor_hash:
+            return True
+        
+        commit = repo.load_commit(current)
+
+        # No parents at all -> can't continue
+        if not commit.parents:
+            return False
+        
+        # Simple model: follow only the first parent
+        current = commit.parents[0]
+
+    return False
+
 
 ## --------------------------- ADDED IN TASK 5: ---------------------------
 
