@@ -653,6 +653,21 @@ class Repository:
 
         return top_level_diff.children
 
+    @requires_repo
+    def merge_trees(main_tree, other_tree):
+        ## Merge two Tree objects into a new record dictionary.
+        ## Feature branch (other_tree) wins in case of conflicts. 
+
+        # Start from main_tree (copy its records)
+        merged_records = dict(main_tree.records)
+
+        # Apply overrides from other_tree
+        for name, record in other_tree.records.items():
+            merged_records[name] = record   # feature wins
+
+        return merged_records
+
+
     def head_file(self) -> Path:
         """Get the path to the HEAD file within the repository.
 
