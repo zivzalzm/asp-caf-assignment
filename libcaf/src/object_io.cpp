@@ -4,6 +4,7 @@
 #include <sys/file.h>
 #include <vector>
 #include <cstring>
+#include <cstdint>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -33,12 +34,12 @@ void save_commit(const std::string &root_dir, const Commit &commit) {
         if (write(fd, &commit.timestamp, sizeof(commit.timestamp)) != sizeof(commit.timestamp))
             throw std::runtime_error("Failed to write timestamp");
 
-        if (commit.parent) {
-            write_with_length(fd, *commit.parent);
-        } else {
-            uint32_t length = 0;
-            if (write(fd, &length, sizeof(length)) != sizeof(length))
-                throw std::runtime_error("Failed to write parent");
+        unit32_t parents_count = commit.parents.size();
+        if (write(fd, &parents_count, sizeof(parents_count)) != sizeof(parents_count))
+            throw std::runtime_error("Failed to write parents count");
+            
+        for (const auto &parent : commit.parents) {
+            write_with_length(fd, parent);
         }
 
         flock(fd, LOCK_UN);
@@ -61,13 +62,25 @@ Commit load_commit(const std::string &root_dir, const std::string &commit_hash) 
     if (read(fd, &timestamp, sizeof(timestamp)) != sizeof(timestamp))
         throw std::runtime_error("Failed to read timestamp");
 
-    std::string parent_str = read_length_prefixed_string(fd);
+    uint32_t parents_count;
+    if (read(fd, &parents_count, sizeof(parents_count)) != sizeof(parents_count))
+        throw std::runtime_error("Failed to read parents count");
+
+    std::vector<std::string> parents;
+    for (uint32_t i = 0; i < parents_count; ++i) {
+        parents.push_back(read_length_prefixed_string(fd));
+    }
 
     flock(fd, LOCK_UN);
     close(fd);
 
-    std::optional<std::string> parent = parent_str.empty() ? std::nullopt : std::make_optional(parent_str);
-    return Commit(tree_hash, author, message, timestamp, parent);
+    if (parents.empty()) {
+        return Commit(tree_hash, author, message, timestamp);
+    } else if (parents.size() == 1) {
+        return Commit(tree_hash, parents[0], author, message, timestamp);
+    } else {
+        return Commit(tree_hash, parents, author, message, timestamp);
+    }
 }
 
 void save_tree(const std::string &root_dir, const Tree &tree) {
