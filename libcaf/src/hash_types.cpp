@@ -15,21 +15,7 @@ std::string hash_object(const Tree& tree) {
     return hash_string(acc_std);
 }
 
-// std::string hash_object(const Commit& commit) {
-//     return hash_string(commit.tree_hash + commit.author + commit.message +
-//                        std::to_string(commit.timestamp) + commit.parent.value_or(""));
-// }
-
 std::string hash_object(const Commit& commit) {
-    std::string acc = commit.tree_hash 
-                    + commit.author 
-                    + commit.message 
-                    + std::to_string(commit.timestamp);
-
-    // Append all parents in order
-    for (const auto &p : commit.parents) {
-        acc += p;
-    }
-
-    return hash_string(acc);
+    return hash_string(commit.tree_hash + commit.author + commit.message +
+                       std::to_string(commit.timestamp) + commit.parent.value_or(""));
 }

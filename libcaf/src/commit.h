@@ -3,7 +3,7 @@
 
 #include <string>
 #include <ctime>
-#include <vector>
+#include <optional>
 
 class Commit {
 public:
@@ -11,10 +11,10 @@ public:
     const std::string author;     // Author of the commit
     const std::string message;    // Commit message
     const std::time_t timestamp;  // Timestamp of the commit
-    const std::vector<std::string> parents; // Parent commit hash
+    const std::optional<std::string> parent; // Parent commit hash
 
-    Commit(const std::string& tree_hash, const std::string& author, const std::string& message, std::time_t timestamp, std::vector<std::string> parents = {}):
-            tree_hash(tree_hash), author(author), message(message), timestamp(timestamp), parents(parents) {}
+    Commit(const std::string& tree_hash, const std::string& author, const std::string& message, std::time_t timestamp, std::optional<std::string> parent = std::nullopt):
+            tree_hash(tree_hash), author(author), message(message), timestamp(timestamp), parent(parent) {}
 };
 
 #endif // COMMIT_H
