@@ -12,7 +12,7 @@ from typing import Concatenate
 from . import Blob, Commit, Tree, TreeRecord, TreeRecordType
 from .constants import (DEFAULT_BRANCH, DEFAULT_REPO_DIR, HASH_CHARSET, HASH_LENGTH, HEADS_DIR, HEAD_FILE,
                         OBJECTS_SUBDIR, REFS_DIR, TAGS_DIR)
-from .plumbing import hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree
+from .plumbing import hash_file, hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree
 from .ref import HashRef, Ref, RefError, SymRef, read_ref, write_ref
 
 
@@ -463,6 +463,33 @@ class Repository:
                 hashes[current_path] = hash_object(tree)
 
         return HashRef(hashes[path])
+    
+    
+    @requires_repo
+    def working_dir_snapshot(self) -> dict[str, str]:
+        """Build a snapshot of the current working directory.
+
+        The snapshot maps relative file paths (POSIX-style) to content hashes.
+        The repository metadata directory (by default, .caf) is always ignored.
+
+        :return: A mapping of relative path -> hash.
+        """
+        snapshot: dict[str, str] = {}
+        repo_root = self.repo_path()
+
+        for path in self.working_dir.rglob('*'):
+            if not path.is_file():
+                continue
+
+            # Never include repository metadata (.caf) in the snapshot
+            if path == repo_root or repo_root in path.parents:
+                continue
+
+            rel_path = path.relative_to(self.working_dir).as_posix()
+            snapshot[rel_path] = hash_file(path)
+
+        return snapshot
+
 
     @requires_repo
     def commit_working_dir(self, author: str, message: str) -> HashRef:
