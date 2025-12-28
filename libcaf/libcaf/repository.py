@@ -423,6 +423,14 @@ class Repository:
         :return: A list of branch names.
         :raises RepositoryNotFoundError: If the repository does not exist."""
         return [x.name for x in self.heads_dir().iterdir() if x.is_file()]
+    
+    @requires_repo
+    def build_tree_from_dir(self, path: Path | str) -> HashRef:
+        """Build and store a Tree object from a directory and return its hash.
+        The returned HashRef points to the root Tree and can be used later by checkout
+        to compare per-file changes.
+        """
+        return self.save_dir(Path(path))
 
     @requires_repo
     def save_dir(self, path: Path) -> HashRef:
@@ -464,33 +472,6 @@ class Repository:
 
         return HashRef(hashes[path])
     
-    
-    @requires_repo
-    def working_dir_snapshot(self) -> dict[str, str]:
-        """Build a snapshot of the current working directory.
-
-        The snapshot maps relative file paths (POSIX-style) to content hashes.
-        The repository metadata directory (by default, .caf) is always ignored.
-
-        :return: A mapping of relative path -> hash.
-        """
-        snapshot: dict[str, str] = {}
-        repo_root = self.repo_path()
-
-        for path in self.working_dir.rglob('*'):
-            if not path.is_file():
-                continue
-
-            # Never include repository metadata (.caf) in the snapshot
-            if path == repo_root or repo_root in path.parents:
-                continue
-
-            rel_path = path.relative_to(self.working_dir).as_posix()
-            snapshot[rel_path] = hash_file(path)
-
-        return snapshot
-
-
     @requires_repo
     def commit_working_dir(self, author: str, message: str) -> HashRef:
         """Commit the current working directory to the repository.

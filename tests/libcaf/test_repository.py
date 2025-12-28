@@ -4,6 +4,7 @@ from shutil import rmtree
 from libcaf.constants import DEFAULT_BRANCH, HASH_LENGTH
 from libcaf.plumbing import hash_object, load_commit, load_tree
 from libcaf.ref import RefError, SymRef
+from libcaf import TreeRecordType
 from libcaf.repository import HashRef, Repository, RepositoryError, branch_ref
 from pytest import raises
 
@@ -359,3 +360,80 @@ def test_head_commit_with_symbolic_ref_returns_hash_ref(temp_repo: Repository) -
     temp_repo.update_ref('heads/main', commit_ref)
 
     assert temp_repo.head_commit() == commit_ref
+    
+def test_build_tree_from_dir_creates_tree_structure(tmp_path):
+    workdir = tmp_path / "repo"
+    workdir.mkdir()
+
+    (workdir / "a.txt").write_text("hello")
+    (workdir / "dir").mkdir()
+    (workdir / "dir" / "b.txt").write_text("world")
+
+    repo = Repository(workdir)
+    repo.init()
+
+    tree_hash = repo.build_tree_from_dir(workdir)
+    tree = load_tree(repo.objects_dir(), tree_hash)
+
+    assert "a.txt" in tree.records
+    assert "dir" in tree.records
+    assert tree.records["dir"].type == TreeRecordType.TREE
+    
+def _collect_tree_paths(repo: Repository, tree_hash: str, prefix: Path = Path(".")) -> set[Path]:
+    """
+    Helper: recursively collect all paths stored in a Tree object (files + dirs).
+    Returns paths relative to repo root.
+    """
+    tree = load_tree(repo.objects_dir(), tree_hash)
+    paths: set[Path] = set()
+
+    for name, rec in tree.records.items():
+        p = prefix / name
+        paths.add(p)
+        if rec.type == TreeRecordType.TREE:
+            paths |= _collect_tree_paths(repo, rec.hash, p)
+
+    return paths
+
+def test_build_tree_from_dir_ignores_repo_metadata_dir(tmp_path: Path) -> None:
+    # Arrange
+    (tmp_path / "keep.txt").write_text("keep", encoding="utf-8")
+
+    repo = Repository(tmp_path)
+    repo.init()
+
+    # Put something inside .caf to ensure it won't be captured
+    caf_dir = tmp_path / ".caf"
+    assert caf_dir.exists()
+    (caf_dir / "SHOULD_NOT_APPEAR.txt").write_text("nope", encoding="utf-8")
+
+    # Act
+    root_tree_ref = repo.build_tree_from_dir(tmp_path)
+
+    # Assert
+    all_paths = _collect_tree_paths(repo, root_tree_ref)
+
+    assert Path("keep.txt") in all_paths
+    assert Path(".caf") not in all_paths
+    assert Path(".caf/SHOULD_NOT_APPEAR.txt") not in all_paths
+
+
+def test_build_tree_from_dir_root_records_types(tmp_path: Path) -> None:
+    # Arrange
+    (tmp_path / "file.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "folder").mkdir()
+    (tmp_path / "folder" / "inner.txt").write_text("y", encoding="utf-8")
+
+    repo = Repository(tmp_path)
+    repo.init()
+
+    # Act
+    root_tree_ref = repo.build_tree_from_dir(tmp_path)
+    root_tree = load_tree(repo.objects_dir(), root_tree_ref)
+
+    # Assert: top-level has both file and folder with correct types
+    assert "file.txt" in root_tree.records
+    assert root_tree.records["file.txt"].type == TreeRecordType.BLOB
+
+    assert "folder" in root_tree.records
+    assert root_tree.records["folder"].type == TreeRecordType.TREE
