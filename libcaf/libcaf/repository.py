@@ -451,7 +451,7 @@ class Repository:
             current_path = stack.pop()
             tree_records: dict[str, TreeRecord] = {}
 
-            for item in current_path.iterdir():
+            for item in sorted(current_path.iterdir(), key=lambda p: p.name):
                 if item.name == self.repo_dir.name:
                     continue
                 if item.is_file():
