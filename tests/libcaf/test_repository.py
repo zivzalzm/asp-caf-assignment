@@ -4,7 +4,6 @@ from shutil import rmtree
 from libcaf.constants import DEFAULT_BRANCH, HASH_LENGTH
 from libcaf.plumbing import hash_object, load_commit, load_tree
 from libcaf.ref import RefError, SymRef
-from libcaf import TreeRecordType
 from libcaf.repository import HashRef, Repository, RepositoryError, branch_ref
 from pytest import raises
 

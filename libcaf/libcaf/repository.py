@@ -12,7 +12,7 @@ from typing import Concatenate
 from . import Blob, Commit, Tree, TreeRecord, TreeRecordType
 from .constants import (DEFAULT_BRANCH, DEFAULT_REPO_DIR, HASH_CHARSET, HASH_LENGTH, HEADS_DIR, HEAD_FILE,
                         OBJECTS_SUBDIR, REFS_DIR, TAGS_DIR)
-from .plumbing import hash_file, hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree
+from .plumbing import hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree
 from .ref import HashRef, Ref, RefError, SymRef, read_ref, write_ref
 
 
@@ -423,42 +423,6 @@ class Repository:
         :return: A list of branch names.
         :raises RepositoryNotFoundError: If the repository does not exist."""
         return [x.name for x in self.heads_dir().iterdir() if x.is_file()]
-    
-    def build_tree_from_fs(self, root: Path) -> tuple[Tree, str, dict[str, Tree]]:
-        """
-        Read-only: build a Tree object representing `root` without writing anything to .caf/objects.
-        Deterministic order: entries are processed sorted by name.
-        Ignores the repository directory (usually ".caf").
-        """
-        if not root.exists() or not root.is_dir():
-            raise NotADirectoryError(str(root))
-
-        subtrees_by_hash: dict[str, Tree] = {}
-
-        def _build(dir_path: Path) -> tuple[Tree, str]:
-            records: dict[str, TreeRecord] = {}
-
-            for item in sorted(dir_path.iterdir(), key=lambda p: p.name):
-                if item.name == self.repo_dir.name:
-                    continue
-
-                if item.is_file():
-                    blob_hash = hash_file(item)  # read-only
-                    records[item.name] = TreeRecord(TreeRecordType.BLOB, blob_hash, item.name)
-
-                elif item.is_dir():
-                    subtree, subtree_hash = _build(item)
-                    records[item.name] = TreeRecord(TreeRecordType.TREE, subtree_hash, item.name)
-                    subtrees_by_hash[subtree_hash] = subtree
-
-            tree = Tree(records)
-            tree_hash = hash_object(tree)
-            subtrees_by_hash[tree_hash] = tree
-            return tree, tree_hash
-
-        tree, tree_hash = _build(root)
-        return tree, tree_hash, subtrees_by_hash
-   
    
    
     @requires_repo
