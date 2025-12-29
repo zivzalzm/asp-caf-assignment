@@ -15,23 +15,7 @@ def build_tree_from_fs(root: Path, repo_dir_name: str) -> tuple[Tree, str, dict[
     hashes_by_path: dict[Path, str] = {}
     subtrees_by_hash: dict[str, Tree] = {}
 
-    # (directory path, expanded flag)
-    stack: deque[tuple[Path, bool]] = deque([(root, False)])
-
-    while stack:
-        dir_path, expanded = stack.pop()
-
-        if not expanded:
-            # Post-order DFS
-            stack.append((dir_path, True))
-
-            for item in reversed(sorted(dir_path.iterdir(), key=lambda p: p.name)):
-                if item.name == repo_dir_name:
-                    continue
-                if item.is_dir():
-                    stack.append((item, False))
-            continue
-
+    def _build_dir_tree(dir_path: Path) -> tuple[Tree, str]:
         records: dict[str, TreeRecord] = {}
 
         for item in sorted(dir_path.iterdir(), key=lambda p: p.name):
@@ -41,7 +25,6 @@ def build_tree_from_fs(root: Path, repo_dir_name: str) -> tuple[Tree, str, dict[
             if item.is_file():
                 blob_hash = hash_file(item)
                 records[item.name] = TreeRecord(TreeRecordType.BLOB, blob_hash, item.name)
-
             elif item.is_dir():
                 subtree_hash = hashes_by_path[item]
                 records[item.name] = TreeRecord(TreeRecordType.TREE, subtree_hash, item.name)
@@ -52,5 +35,22 @@ def build_tree_from_fs(root: Path, repo_dir_name: str) -> tuple[Tree, str, dict[
         trees_by_path[dir_path] = tree
         hashes_by_path[dir_path] = tree_hash
         subtrees_by_hash[tree_hash] = tree
+
+        return tree, tree_hash
+
+    stack: deque[tuple[Path, bool]] = deque([(root, False)])
+
+    while stack:
+        dir_path, expanded = stack.pop()
+
+        if expanded:
+            _build_dir_tree(dir_path)
+        else:
+            stack.append((dir_path, True))
+            for item in reversed(sorted(dir_path.iterdir(), key=lambda p: p.name)):
+                if item.name == repo_dir_name:
+                    continue
+                if item.is_dir():
+                    stack.append((item, False))
 
     return trees_by_path[root], hashes_by_path[root], subtrees_by_hash
