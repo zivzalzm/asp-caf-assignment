@@ -424,14 +424,43 @@ class Repository:
         :raises RepositoryNotFoundError: If the repository does not exist."""
         return [x.name for x in self.heads_dir().iterdir() if x.is_file()]
     
-    @requires_repo
-    def build_tree_from_dir(self, path: Path | str) -> HashRef:
-        """Build and store a Tree object from a directory and return its hash.
-        The returned HashRef points to the root Tree and can be used later by checkout
-        to compare per-file changes.
+    def build_tree_from_fs(self, root: Path) -> tuple[Tree, str, dict[str, Tree]]:
         """
-        return self.save_dir(Path(path))
+        Read-only: build a Tree object representing `root` without writing anything to .caf/objects.
+        Deterministic order: entries are processed sorted by name.
+        Ignores the repository directory (usually ".caf").
+        """
+        if not root.exists() or not root.is_dir():
+            raise NotADirectoryError(str(root))
 
+        subtrees_by_hash: dict[str, Tree] = {}
+
+        def _build(dir_path: Path) -> tuple[Tree, str]:
+            records: dict[str, TreeRecord] = {}
+
+            for item in sorted(dir_path.iterdir(), key=lambda p: p.name):
+                if item.name == self.repo_dir.name:
+                    continue
+
+                if item.is_file():
+                    blob_hash = hash_file(item)  # read-only
+                    records[item.name] = TreeRecord(TreeRecordType.BLOB, blob_hash, item.name)
+
+                elif item.is_dir():
+                    subtree, subtree_hash = _build(item)
+                    records[item.name] = TreeRecord(TreeRecordType.TREE, subtree_hash, item.name)
+                    subtrees_by_hash[subtree_hash] = subtree
+
+            tree = Tree(records)
+            tree_hash = hash_object(tree)
+            subtrees_by_hash[tree_hash] = tree
+            return tree, tree_hash
+
+        tree, tree_hash = _build(root)
+        return tree, tree_hash, subtrees_by_hash
+   
+   
+   
     @requires_repo
     def save_dir(self, path: Path) -> HashRef:
         """Save the content of a directory to the repository.
@@ -451,7 +480,7 @@ class Repository:
             current_path = stack.pop()
             tree_records: dict[str, TreeRecord] = {}
 
-            for item in sorted(current_path.iterdir(), key=lambda p: p.name):
+            for item in current_path.iterdir():
                 if item.name == self.repo_dir.name:
                     continue
                 if item.is_file():
