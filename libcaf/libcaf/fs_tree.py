@@ -25,17 +25,13 @@ def build_tree_from_fs(root: Path, repo_dir_name: str) -> tuple[Tree, str, dict[
             if item.is_file():
                 blob_hash = hash_file(item)
                 records[item.name] = TreeRecord(TreeRecordType.BLOB, blob_hash, item.name)
+
             elif item.is_dir():
                 subtree_hash = hashes_by_path[item]
                 records[item.name] = TreeRecord(TreeRecordType.TREE, subtree_hash, item.name)
 
         tree = Tree(records)
         tree_hash = hash_object(tree)
-
-        trees_by_path[dir_path] = tree
-        hashes_by_path[dir_path] = tree_hash
-        subtrees_by_hash[tree_hash] = tree
-
         return tree, tree_hash
 
     stack: deque[tuple[Path, bool]] = deque([(root, False)])
@@ -44,7 +40,11 @@ def build_tree_from_fs(root: Path, repo_dir_name: str) -> tuple[Tree, str, dict[
         dir_path, expanded = stack.pop()
 
         if expanded:
-            _build_dir_tree(dir_path)
+            tree, tree_hash = _build_dir_tree(dir_path)
+
+            trees_by_path[dir_path] = tree
+            hashes_by_path[dir_path] = tree_hash
+            subtrees_by_hash[tree_hash] = tree
         else:
             stack.append((dir_path, True))
             for item in reversed(sorted(dir_path.iterdir(), key=lambda p: p.name)):
