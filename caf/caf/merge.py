@@ -1,8 +1,8 @@
 from collections import deque
-from typing import Optional
+from libcaf.ref import HashRef
+from libcaf.plumbing import load_commit
 
-
-def find_common_ancestor(commit_a: str, commit_b: str, parents: dict[str, list[str]]) -> Optional[str]:
+def find_common_ancestor(commit_a: HashRef, commit_b: HashRef) -> HashRef | None:
     """
     Return the lowest common ancestor of two commits, or None if no common ancestor exists.
     """
@@ -11,33 +11,42 @@ def find_common_ancestor(commit_a: str, commit_b: str, parents: dict[str, list[s
     if commit_a == commit_b:
         return commit_a
 
-    # Collect all ancestors of commit_a
-    ancestors_of_a = set()
-    stack = [commit_a]
+    # Collect all ancestors of commit_a (including commit_a itself)
+    ancestors_of_a: set[HashRef] = set()
+    stack: list[HashRef] = [commit_a]
 
     while stack:
         current = stack.pop()
-        if current in ancestors_of_a:
-            continue
         ancestors_of_a.add(current)
 
-        for p in parents.get(current, []):
-            stack.append(p)
+        try:
+            commit = load_commit(current)
+        except Exception:
+            # commit not found in this repository
+            continue
 
-    # Traverse ancestors of commit_b from closest to farthest (using BFS)
-    queue = deque([commit_b])
-    visited = set()
+        stack.extend(commit.parents)
+
+    # BFS from commit_b 
+    # This also handles the case where commit_b is an ancestor of commit_a,
+    # since commit_a is already included in ancestors_of_a.
+    queue: deque[HashRef] = deque([commit_b])
+    visited: set[HashRef] = set()
 
     while queue:
         current = queue.popleft()
-        if current in visited:
-            continue
-        visited.add(current)
+        if current not in visited:
+            visited.add(current)
 
-        if current in ancestors_of_a:
-            return current
+            if current in ancestors_of_a:
+                return current
 
-        for p in parents.get(current, []):
-            queue.append(p)
+            try:
+                commit = load_commit(current)
+            except Exception:
+                # commit not found in this repository
+                continue
+            
+            queue.extend(commit.parents)
 
     return None
