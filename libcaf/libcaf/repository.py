@@ -423,7 +423,8 @@ class Repository:
         :return: A list of branch names.
         :raises RepositoryNotFoundError: If the repository does not exist."""
         return [x.name for x in self.heads_dir().iterdir() if x.is_file()]
-
+   
+   
     @requires_repo
     def save_dir(self, path: Path) -> HashRef:
         """Save the content of a directory to the repository.
@@ -463,7 +464,7 @@ class Repository:
                 hashes[current_path] = hash_object(tree)
 
         return HashRef(hashes[path])
-
+    
     @requires_repo
     def commit_working_dir(self, author: str, message: str) -> HashRef:
         """Commit the current working directory to the repository.
