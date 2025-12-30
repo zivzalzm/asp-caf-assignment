@@ -107,7 +107,7 @@ Tree load_tree(const std::string &root_dir, const std::string &tree_hash) {
     if (read(fd, &num_records, sizeof(num_records)) != sizeof(num_records))
         throw std::runtime_error("Failed to read the number of records");
 
-    std::unordered_map<std::string, TreeRecord> records;
+    std::map<std::string, TreeRecord> records;
     for (uint32_t i = 0; i < num_records; ++i) {
         TreeRecord record = load_tree_record(fd);
         records.emplace(record.name, record);
