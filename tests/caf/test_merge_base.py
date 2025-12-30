@@ -1,110 +1,38 @@
+import pytest
 from libcaf.repository import Repository
-
-from caf import cli_commands
 from caf.merge import find_common_ancestor
 
 
 def test_same_commit(temp_repo: Repository) -> None:
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="A",
-    )
-    a = temp_repo.head_commit
+    a = temp_repo.commit_working_dir(author="Test Author", message="A")
 
-    assert find_common_ancestor(a, a) == a
+    assert find_common_ancestor(temp_repo, a, a) == a
 
 
 def test_direct_ancestor(temp_repo: Repository) -> None:
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="A",
-    )
-    a = temp_repo.head_commit
+    parent = temp_repo.commit_working_dir(author="Test Author", message="A")
+    child = temp_repo.commit_working_dir(author="Test Author", message="B")
 
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="B",
-    )
-    b = temp_repo.head_commit
-
-    assert find_common_ancestor(a, b) == a
+    assert find_common_ancestor(temp_repo, parent, child) == parent
 
 
 def test_linear_history(temp_repo: Repository) -> None:
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="A",
-    )
-    a = temp_repo.head_commit
+    parent = temp_repo.commit_working_dir(author="Test Author", message="A")
+    child = temp_repo.commit_working_dir(author="Test Author", message="B")
+    grandchild = temp_repo.commit_working_dir(author="Test Author",message="C")
 
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="B",
-    )
-    b = temp_repo.head_commit
-
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="C",
-    )
-    c = temp_repo.head_commit
-
-    assert find_common_ancestor(b, c) == b
-
+    assert find_common_ancestor(temp_repo, child, grandchild) == child
 
 def test_disconnected_histories(temp_repo, temp_repo_dir) -> None:
-    # first repository
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="A",
-    )
-    a = temp_repo.head_commit()
+    root1 = temp_repo.commit_working_dir(author="Test Author", message="A")
+    child1 = temp_repo.commit_working_dir(author="Test Author", message="B")
 
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="B",
-    )
-    b = temp_repo.head_commit()
-
-    # second, completely separate repository
     other_repo = Repository(working_dir=temp_repo_dir / "other")
     other_repo.init()
+    root2 = other_repo.commit_working_dir(author="Test Author", message="X")
 
-    cli_commands.commit(
-        working_dir_path=other_repo.working_dir,
-        author="Test Author",
-        message="X",
-    )
-    x = other_repo.head_commit()
+    with pytest.raises(RuntimeError):
+        find_common_ancestor(temp_repo, child1, root2)
 
-    assert find_common_ancestor(b, x) is None
-
-
-def test_root_vs_unrelated_commit(temp_repo, temp_repo_dir) -> None:
-    cli_commands.commit(
-        working_dir_path=temp_repo.working_dir,
-        author="Test Author",
-        message="A",
-    )
-    a = temp_repo.head_commit()
-
-    # unrelated repository
-    other_repo = Repository(working_dir=temp_repo_dir / "other_root")
-    other_repo.init()
-
-    cli_commands.commit(
-        working_dir_path=other_repo.working_dir,
-        author="Test Author",
-        message="C",
-    )
-    c = other_repo.head_commit()
-
-    assert find_common_ancestor(a, c) is None
+    with pytest.raises(RuntimeError):
+        find_common_ancestor(other_repo, root2, root1)
