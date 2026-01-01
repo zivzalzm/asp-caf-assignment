@@ -53,5 +53,4 @@ def test_common_ancestor_diverged_history(temp_repo: Repository, temp_repo_dir) 
     right = HashRef(hash_object(commit))
     save_commit(temp_repo.objects_dir(), commit)
 
-    # LCA of left and right should be base
     assert find_common_ancestor(temp_repo_dir, left, right) == base
