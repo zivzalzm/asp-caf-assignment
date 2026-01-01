@@ -1,19 +1,24 @@
 import pytest
+from libcaf import Commit
 from libcaf.repository import Repository
 from caf.merge import find_common_ancestor
+from libcaf.plumbing import hash_object
+from libcaf.ref import HashRef
+from libcaf.plumbing import save_commit
 
+import time
 
 def test_same_commit(temp_repo: Repository) -> None:
     a = temp_repo.commit_working_dir(author="Test Author", message="A")
 
-    assert find_common_ancestor(temp_repo, a, a) == a
+    assert find_common_ancestor(temp_repo.working_dir, a, a) == a
 
 
 def test_direct_ancestor(temp_repo: Repository) -> None:
     parent = temp_repo.commit_working_dir(author="Test Author", message="A")
     child = temp_repo.commit_working_dir(author="Test Author", message="B")
 
-    assert find_common_ancestor(temp_repo, parent, child) == parent
+    assert find_common_ancestor(temp_repo.working_dir, parent, child) == parent
 
 
 def test_linear_history(temp_repo: Repository) -> None:
@@ -21,18 +26,32 @@ def test_linear_history(temp_repo: Repository) -> None:
     child = temp_repo.commit_working_dir(author="Test Author", message="B")
     grandchild = temp_repo.commit_working_dir(author="Test Author",message="C")
 
-    assert find_common_ancestor(temp_repo, child, grandchild) == child
+    assert find_common_ancestor(temp_repo.working_dir, child, grandchild) == child
 
 def test_disconnected_histories(temp_repo, temp_repo_dir) -> None:
     root1 = temp_repo.commit_working_dir(author="Test Author", message="A")
     child1 = temp_repo.commit_working_dir(author="Test Author", message="B")
 
-    other_repo = Repository(working_dir=temp_repo_dir / "other")
-    other_repo.init()
-    root2 = other_repo.commit_working_dir(author="Test Author", message="X")
+    tree_hash = temp_repo.save_dir(temp_repo.working_dir)
+    commit = Commit(tree_hash, "Test Author", "C", int(time.time()), [])
 
-    with pytest.raises(RuntimeError):
-        find_common_ancestor(temp_repo, child1, root2)
+    root2 = HashRef(hash_object(commit))
+    save_commit(temp_repo.objects_dir(), commit)
 
-    with pytest.raises(RuntimeError):
-        find_common_ancestor(other_repo, root2, root1)
+    assert find_common_ancestor(temp_repo_dir, root1, root2) is None
+    #with pytest.raises(RuntimeError):
+     #   find_common_ancestor(temp_repo.working_dir, child1, root2)
+
+def test_common_ancestor_diverged_history(temp_repo: Repository, temp_repo_dir) -> None:
+    base = temp_repo.commit_working_dir(author="Test Author", message="A")
+
+    left = temp_repo.commit_working_dir(author="Test Author", message="B")
+
+    tree_hash = temp_repo.save_dir(temp_repo.working_dir)
+    commit = Commit(tree_hash, "Test Author", "C", int(time.time()), [base])
+
+    right = HashRef(hash_object(commit))
+    save_commit(temp_repo.objects_dir(), commit)
+
+    # LCA of left and right should be base
+    assert find_common_ancestor(temp_repo_dir, left, right) == base
