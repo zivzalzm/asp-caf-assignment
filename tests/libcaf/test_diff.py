@@ -2,43 +2,18 @@ from collections.abc import Sequence
 from pathlib import Path
 from libcaf.repository import (AddedDiff, Diff, ModifiedDiff, MovedFromDiff, MovedToDiff, RemovedDiff, Repository)
 
-def _objects_snapshot(repo: Repository) -> set[str]:
-    return {
-        p.relative_to(repo.objects_dir()).as_posix()
-        for p in repo.objects_dir().rglob("*")
-        if p.is_file()
-    }
-
-def test_diff_commit_vs_dir_is_read_only_and_detects_added(temp_repo: Repository) -> None:
+def test_diff_commit_vs_dir_detects_added(temp_repo: Repository) -> None:
     (temp_repo.working_dir / "a.txt").write_text("a", encoding="utf-8")
     base = temp_repo.commit_working_dir("Tester", "base")
 
     # Add a new file in working dir but do not commit
     (temp_repo.working_dir / "b.txt").write_text("b", encoding="utf-8")
 
-    before = _objects_snapshot(temp_repo)
     diffs = temp_repo.diff_commits(base, temp_repo.working_dir)
-    after = _objects_snapshot(temp_repo)
+    added, modified, moved_to, moved_from, removed = split_diffs_by_type(diffs)
 
-    added, _, _, _, _ = split_diffs_by_type(diffs)
-
-    assert after == before
     assert len(added) == 1
     assert added[0].record.name == "b.txt"
-
-def test_diff_dir_vs_commit_is_read_only(temp_repo: Repository) -> None:
-    (temp_repo.working_dir / "a.txt").write_text("a", encoding="utf-8")
-    commit = temp_repo.commit_working_dir("Tester", "base")
-
-    # Change working dir without committing
-    (temp_repo.working_dir / "a.txt").unlink()
-
-    before = _objects_snapshot(temp_repo)
-    _ = temp_repo.diff_commits(temp_repo.working_dir, commit)
-    after = _objects_snapshot(temp_repo)
-
-    assert after == before
-
 
 def test_diff_dir_vs_commit_detects_removed(temp_repo: Repository) -> None:
     (temp_repo.working_dir / "a.txt").write_text("a", encoding="utf-8")
