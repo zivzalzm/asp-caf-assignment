@@ -1,6 +1,7 @@
 from collections import deque
 from pathlib import Path
 
+from libcaf.repository import Repository
 from libcaf.ref import HashRef
 from libcaf.plumbing import load_commit
 from libcaf.constants import DEFAULT_REPO_DIR
@@ -14,9 +15,9 @@ def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -
     if commit_a == commit_b:
         return commit_a
     
-    objects_dir = repo_dir / DEFAULT_REPO_DIR / "objects"
-    
-
+    repo = Repository(repo_dir)
+    objects_dir = repo.objects_dir()
+            
     # Collect all ancestors of commit_a (including commit_a itself)
     ancestors_of_a: set[HashRef] = set()
     stack: list[HashRef] = [commit_a]

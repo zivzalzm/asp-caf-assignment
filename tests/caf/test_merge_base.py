@@ -39,16 +39,14 @@ def test_disconnected_histories(temp_repo, temp_repo_dir) -> None:
     save_commit(temp_repo.objects_dir(), commit)
 
     assert find_common_ancestor(temp_repo_dir, root1, root2) is None
-    #with pytest.raises(RuntimeError):
-     #   find_common_ancestor(temp_repo.working_dir, child1, root2)
+
 
 def test_common_ancestor_diverged_history(temp_repo: Repository, temp_repo_dir) -> None:
     base = temp_repo.commit_working_dir(author="Test Author", message="A")
 
     left = temp_repo.commit_working_dir(author="Test Author", message="B")
 
-    tree_hash = temp_repo.save_dir(temp_repo.working_dir)
-    commit = Commit(tree_hash, "Test Author", "C", int(time.time()), [base])
+    commit = Commit("tree_hash", "Test Author", "C", int(time.time()), [base])
 
     right = HashRef(hash_object(commit))
     save_commit(temp_repo.objects_dir(), commit)
