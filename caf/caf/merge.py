@@ -59,46 +59,24 @@ def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -
             
             queue.extend(commit.parents)
 
-    return None
+    return None    
 
-
-def classify_merge(repo_dir: Path, head: HashRef, target: HashRef) -> MergeCase:
+def merge(repo: Repository, target: HashRef) -> MergeCase:
     """
-    Classify the type of merge between two commits.
-    Returns one of: 'fast-forward', 'three-way', 'no-common-ancestor'
+    This function currently only classifies the merge type and does not perform actual merging.
     """
-    merge_base = find_common_ancestor(repo_dir, head, target)
+    head = repo.head_commit()
+    merge_base = find_common_ancestor(repo.working_dir, head, target)
 
-    if merge_base is None:
+    if merge_base == None:
         return MergeCase.DISCONNECTED
     
     elif merge_base == target:
         return MergeCase.UP_TO_DATE
-    
+
     elif merge_base == head:
-        return MergeCase.FAST_FORWARD
-    
-    else:
-        return MergeCase.THREE_WAY
-    
-
-def merge(repo: Repository, target: HashRef) -> None:
-    """
-    Perform a merge of the target commit into the current HEAD of the repository.
-    This function currently only classifies the merge type and does not perform actual merging.
-    """
-    head = repo.head_commit()
-    merge_case = classify_merge(repo.working_dir, head, target)
-
-    if merge_case == MergeCase.DISCONNECTED:
-        raise RuntimeError("Cannot merge: no common ancestor found.")
-    
-    elif merge_case == MergeCase.UP_TO_DATE:
-        return
-    
-    elif merge_case == MergeCase.FAST_FORWARD:
         repo.set_head(target)
-        return
-    
-    elif merge_case == MergeCase.THREE_WAY:
+        return MergeCase.FAST_FORWARD
+
+    elif merge_base != head and merge_base != target:
         raise NotImplementedError("Three-way merge is not implemented yet.")
