@@ -5,7 +5,6 @@ from enum import Enum
 from libcaf.repository import Repository
 from libcaf.ref import HashRef
 from libcaf.plumbing import load_commit
-from libcaf.constants import DEFAULT_REPO_DIR
 
 class MergeCase(Enum):
     DISCONNECTED = 'no-common-ancestor'
@@ -81,3 +80,25 @@ def classify_merge(repo_dir: Path, head: HashRef, target: HashRef) -> MergeCase:
     
     else:
         return MergeCase.THREE_WAY
+    
+
+def merge(repo: Repository, target: HashRef) -> None:
+    """
+    Perform a merge of the target commit into the current HEAD of the repository.
+    This function currently only classifies the merge type and does not perform actual merging.
+    """
+    head = repo.head_commit()
+    merge_case = classify_merge(repo.working_dir, head, target)
+
+    if merge_case == MergeCase.DISCONNECTED:
+        raise RuntimeError("Cannot merge: no common ancestor found.")
+    
+    elif merge_case == MergeCase.UP_TO_DATE:
+        return
+    
+    elif merge_case == MergeCase.FAST_FORWARD:
+        repo.set_head(target)
+        return
+    
+    elif merge_case == MergeCase.THREE_WAY:
+        raise NotImplementedError("Three-way merge is not implemented yet.")
