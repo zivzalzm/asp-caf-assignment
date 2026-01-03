@@ -62,9 +62,6 @@ def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -
     return None    
 
 def merge(repo: Repository, target: HashRef) -> MergeCase:
-    """
-    This function currently only classifies the merge type and does not perform actual merging.
-    """
     head = repo.head_commit()
     merge_base = find_common_ancestor(repo.working_dir, head, target)
 
@@ -75,7 +72,8 @@ def merge(repo: Repository, target: HashRef) -> MergeCase:
         return MergeCase.UP_TO_DATE
 
     elif merge_base == head:
-        # repo.set_head(target)
+        head_ref = repo.head_ref()
+        repo.update_ref(head_ref, target)
         return MergeCase.FAST_FORWARD
 
     elif merge_base != head and merge_base != target:

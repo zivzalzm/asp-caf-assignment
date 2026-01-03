@@ -1,4 +1,3 @@
-import pytest
 import time
 from libcaf import Commit
 from libcaf.repository import Repository
@@ -15,13 +14,17 @@ def test_merge_disconnected_histories(temp_repo):
     root2_ref = HashRef(hash_object(root2))
     save_commit(temp_repo.objects_dir(), root2)
 
-    assert merge(temp_repo, root2_ref) == MergeCase.DISCONNECTED
+    result = merge(temp_repo, root2_ref)
+    assert result == MergeCase.DISCONNECTED
+    assert temp_repo.head_commit() == child1
 
 def test_merge_up_to_date(temp_repo):
     root_target = temp_repo.commit_working_dir(author="Test Author", message="A")
     child_head = temp_repo.commit_working_dir(author="Test Author", message="B")
 
-    assert merge(temp_repo, root_target) == MergeCase.UP_TO_DATE
+    result = merge(temp_repo, root_target)
+    assert result == MergeCase.UP_TO_DATE
+    assert temp_repo.head_commit() == child_head
 
 def test_merge_fast_forward(temp_repo):
     root_head = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -30,7 +33,9 @@ def test_merge_fast_forward(temp_repo):
     child_target_ref = HashRef(hash_object(child_target))
     save_commit(temp_repo.objects_dir(), child_target)
 
-    assert merge(temp_repo, child_target_ref) == MergeCase.FAST_FORWARD
+    result = merge(temp_repo, child_target_ref)
+    assert result == MergeCase.FAST_FORWARD
+    assert temp_repo.head_commit() == child_target_ref
 
 def test_merge_three_way(temp_repo):
     base = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -41,4 +46,6 @@ def test_merge_three_way(temp_repo):
     right = HashRef(hash_object(commit))
     save_commit(temp_repo.objects_dir(), commit)
 
-    assert merge(temp_repo, right) == MergeCase.THREE_WAY
+    result = merge(temp_repo, right)
+    assert result == MergeCase.THREE_WAY
+    assert temp_repo.head_commit() == left
