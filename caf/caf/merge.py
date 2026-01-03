@@ -75,7 +75,7 @@ def merge(repo: Repository, target: HashRef) -> MergeCase:
         return MergeCase.UP_TO_DATE
 
     elif merge_base == head:
-        repo.set_head(target)
+        # repo.set_head(target)
         return MergeCase.FAST_FORWARD
 
     elif merge_base != head and merge_base != target:
