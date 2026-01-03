@@ -1,11 +1,17 @@
 from collections import deque
 from pathlib import Path
+from enum import Enum
 
 from libcaf.repository import Repository
 from libcaf.ref import HashRef
 from libcaf.plumbing import load_commit
 from libcaf.constants import DEFAULT_REPO_DIR
 
+class MergeCase(Enum):
+    DISCONNECTED = 'no-common-ancestor'
+    UP_TO_DATE = 'up-to-date'
+    FAST_FORWARD = 'fast-forward'
+    THREE_WAY = 'three-way'
 
 def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -> HashRef | None:
     """
@@ -55,3 +61,23 @@ def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -
             queue.extend(commit.parents)
 
     return None
+
+
+def classify_merge(repo_dir: Path, head: HashRef, target: HashRef) -> MergeCase:
+    """
+    Classify the type of merge between two commits.
+    Returns one of: 'fast-forward', 'three-way', 'no-common-ancestor'
+    """
+    merge_base = find_common_ancestor(repo_dir, head, target)
+
+    if merge_base is None:
+        return MergeCase.DISCONNECTED
+    
+    elif merge_base == target:
+        return MergeCase.UP_TO_DATE
+    
+    elif merge_base == head:
+        return MergeCase.FAST_FORWARD
+    
+    else:
+        return MergeCase.THREE_WAY
