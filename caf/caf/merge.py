@@ -62,6 +62,13 @@ def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -
     return None    
 
 def merge(repo: Repository, target: HashRef) -> MergeCase:
+    """
+    Determine and perform the appropriate merge operation between the current HEAD
+    of the repository and the given target commit.
+
+    :return: A MergeCase value describing the outcome of the merge decision.
+    :raises NotImplementedError: If a three-way merge is required."""
+
     head = repo.head_commit()
     merge_base = find_common_ancestor(repo.working_dir, head, target)
 
