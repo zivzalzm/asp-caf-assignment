@@ -1,11 +1,16 @@
 from collections import deque
 from pathlib import Path
+from enum import Enum
 
 from libcaf.repository import Repository
 from libcaf.ref import HashRef
 from libcaf.plumbing import load_commit
-from libcaf.constants import DEFAULT_REPO_DIR
 
+class MergeCase(Enum):
+    DISCONNECTED = 'no-common-ancestor'
+    UP_TO_DATE = 'up-to-date'
+    FAST_FORWARD = 'fast-forward'
+    THREE_WAY = 'three-way'
 
 def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -> HashRef | None:
     """
@@ -54,4 +59,29 @@ def find_common_ancestor(repo_dir: Path, commit_a: HashRef, commit_b: HashRef) -
             
             queue.extend(commit.parents)
 
-    return None
+    return None    
+
+def merge(repo: Repository, target: HashRef) -> MergeCase:
+    """
+    Determine and perform the appropriate merge operation between the current HEAD
+    of the repository and the given target commit.
+
+    :return: A MergeCase value describing the outcome of the merge decision.
+    :raises NotImplementedError: If a three-way merge is required."""
+
+    head = repo.head_commit()
+    merge_base = find_common_ancestor(repo.working_dir, head, target)
+
+    if merge_base == None:
+        return MergeCase.DISCONNECTED
+    
+    elif merge_base == target:
+        return MergeCase.UP_TO_DATE
+
+    elif merge_base == head:
+        head_ref = repo.head_ref()
+        repo.update_ref(head_ref, target)
+        return MergeCase.FAST_FORWARD
+
+    elif merge_base != head and merge_base != target:
+        raise NotImplementedError("Three-way merge is not implemented yet.")
