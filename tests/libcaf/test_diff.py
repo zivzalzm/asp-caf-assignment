@@ -24,10 +24,10 @@ def test_diff_dir_vs_commit_detects_added(temp_repo: Repository) -> None:
     (temp_repo.working_dir / "b.txt").write_text("b", encoding="utf-8")
 
     diffs = temp_repo.diff(temp_repo.working_dir, commit)
-    added, _, _, _, _ = split_diffs_by_type(diffs)
+    _, _, _, _, removed = split_diffs_by_type(diffs)
 
-    assert len(added) == 1
-    assert added[0].record.name == "b.txt"
+    assert len(removed) == 1
+    assert removed[0].record.name == "b.txt"
 
 
 def test_diff_dir_vs_commit_detects_removed(temp_repo: Repository) -> None:
@@ -54,7 +54,12 @@ def test_diff_dir_vs_dir_detects_modified(temp_repo: Repository, tmp_path: Path)
     (dir2 / "a.txt").write_text("new", encoding="utf-8")
 
     diffs = temp_repo.diff(dir1, dir2)
-    _, modified, _, _, _ = split_diffs_by_type(diffs)
+    added, modified, moved_to, moved_from, removed = split_diffs_by_type(diffs)
+
+    assert added == []
+    assert moved_to == []
+    assert moved_from == []
+    assert removed == []
 
     assert len(modified) == 1
     assert modified[0].record.name == "a.txt"

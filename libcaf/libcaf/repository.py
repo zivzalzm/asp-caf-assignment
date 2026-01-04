@@ -425,6 +425,40 @@ class Repository:
         except Exception as e:
             msg = f'Error loading commit {current_hash}'
             raise RepositoryError(msg) from e
+        
+    def _source_to_tree(self, source: Ref | str | Path) -> tuple[Tree, dict[str, Tree] | None]:
+        # Path case: either a Path object or a string that points to an existing directory
+        if isinstance(source, Path):
+            if source.exists() and source.is_dir():
+                root_tree, _, subtrees = build_tree_from_fs(source, self.repo_dir.name)
+                return root_tree, subtrees
+        # Note: directory paths take precedence over ref-like strings (even if the name looks like a hash).
+        if isinstance(source, str):
+            p = Path(source)
+            if p.exists() and p.is_dir():
+                root_tree, _, subtrees = build_tree_from_fs(p, self.repo_dir.name)
+                return root_tree, subtrees
+
+        # Commit/ref case (Ref object, commit hash string, ref string)
+        commit_hash = self.resolve_ref(source)
+        if commit_hash is None:
+            msg = f'Cannot resolve reference {source}'
+            raise RefError(msg)
+
+        commit = load_commit(self.objects_dir(), commit_hash)
+        root_tree = load_tree(self.objects_dir(), commit.tree_hash)
+        return root_tree, None
+        
+    def _make_lookup(self, mem_trees: dict[str, Tree] | None):
+        if mem_trees is None:
+            return lambda tree_hash: load_tree(self.objects_dir(), tree_hash)
+
+        def _lookup(tree_hash: str) -> Tree:
+            if tree_hash in mem_trees:
+                return mem_trees[tree_hash]
+            return load_tree(self.objects_dir(), tree_hash)
+
+        return _lookup
 
     @requires_repo
     def diff(
@@ -447,50 +481,13 @@ class Repository:
         # Early exit: same input on both sides
         if source1 == source2:
             return []
-            
-        def _source_to_tree(source: Ref | str | Path) -> tuple[Tree, dict[str, Tree] | None]:
-        # Path case: either a Path object or a string that points to an existing directory
-            if isinstance(source, Path):
-                if source.exists() and source.is_dir():
-                    root_tree, _, subtrees = build_tree_from_fs(source, self.repo_dir.name)
-                    return root_tree, subtrees
-
-            if isinstance(source, str):
-                p = Path(source)
-                if p.exists() and p.is_dir():
-                    root_tree, _, subtrees = build_tree_from_fs(p, self.repo_dir.name)
-                    return root_tree, subtrees
-
-            # Commit/ref case (Ref object, commit hash string, ref string)
-            commit_hash = self.resolve_ref(source)
-            if commit_hash is None:
-                msg = f'Cannot resolve reference {source}'
-                raise RefError(msg)
-
-            commit = load_commit(self.objects_dir(), commit_hash)
-            root_tree = load_tree(self.objects_dir(), commit.tree_hash)
-            return root_tree, None
-        
-        def _make_lookup(mem_trees: dict[str, Tree] | None):
-            if mem_trees is None:
-                return lambda tree_hash: load_tree(self.objects_dir(), tree_hash)
-
-            def _lookup(tree_hash: str) -> Tree:
-                if tree_hash in mem_trees:
-                    return mem_trees[tree_hash]
-                return load_tree(self.objects_dir(), tree_hash)
-
-            return _lookup
 
         try:
-            tree1, mem1 = _source_to_tree(source1)
-            tree2, mem2 = _source_to_tree(source2)
-            lookup1 = _make_lookup(mem1)
-            lookup2 = _make_lookup(mem2)
-            # Normalize order: directory snapshot is treated as the "new" side.
-            if mem1 is not None and mem2 is None:
-                tree1, tree2 = tree2, tree1
-                lookup1, lookup2 = lookup2, lookup1            
+            tree1, mem1 = self._source_to_tree(source1)
+            tree2, mem2 = self._source_to_tree(source2)
+            lookup1 = self._make_lookup(mem1)
+            lookup2 = self._make_lookup(mem2)          
+        
         except Exception as e:
             msg = 'Error loading commit or tree'
             raise RepositoryError(msg) from e
