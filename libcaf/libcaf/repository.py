@@ -427,7 +427,7 @@ class Repository:
             raise RepositoryError(msg) from e
 
     @requires_repo
-    def diff_commits(
+    def diff(
         self,
         source1: Ref | str | Path | None = None,
         source2: Ref | str | Path | None = None,
@@ -438,76 +438,65 @@ class Repository:
         :param source2:: Second commit reference or directory path.
         :return: A list of Diff objects representing the differences between the two inputs.
         :raises RepositoryError: If a commit or tree cannot be loaded.
-        :raises RepositoryNotFoundError: If the repository does not exist.
-        """
+        :raises RepositoryNotFoundError: If the repository does not exist."""
         if source1 is None:
             source1 = self.head_ref()
         if source2 is None:
             source2 = self.head_ref()
+            
+        def _source_to_tree(source: Ref | str | Path) -> tuple[Tree, dict[str, Tree] | None]:
+        # Path case: either a Path object or a string that points to an existing directory
+            if isinstance(source, Path):
+                if source.exists() and source.is_dir():
+                    root_tree, _, subtrees = build_tree_from_fs(source, self.repo_dir.name)
+                    return root_tree, subtrees
 
-        mem_trees: dict[str, Tree] = {}
-
-        def _try_dir_tree(source: Ref | str | Path) -> Tree | None:
-            if isinstance(source, (str, Path)):
+            if isinstance(source, str):
                 p = Path(source)
                 if p.exists() and p.is_dir():
                     root_tree, _, subtrees = build_tree_from_fs(p, self.repo_dir.name)
-                    mem_trees.update(subtrees)
-                    return root_tree
-            return None
+                    return root_tree, subtrees
 
-        tree1 = _try_dir_tree(source1)
-        tree2 = _try_dir_tree(source2)
-        dir1 = tree1 is not None
-        dir2 = tree2 is not None
-        commit1 = None
-        commit2 = None
-
-        try:       
-            commit_hash1 = self.resolve_ref(source1) if tree1 is None else None
-            commit_hash2 = self.resolve_ref(source2) if tree2 is None else None
-
-            if tree1 is None and commit_hash1 is None:
-                msg = f'Cannot resolve reference {source1}'
-                raise RefError(msg)
-            if tree2 is None and commit_hash2 is None:
-                msg = f'Cannot resolve reference {source2}'
+            # Commit/ref case (Ref object, commit hash string, ref string)
+            commit_hash = self.resolve_ref(source)
+            if commit_hash is None:
+                msg = f'Cannot resolve reference {source}'
                 raise RefError(msg)
 
-            commit1 = load_commit(self.objects_dir(), commit_hash1) if tree1 is None else None
-            commit2 = load_commit(self.objects_dir(), commit_hash2) if tree2 is None else None      
-        except Exception as e:
-            msg = 'Error loading commit'
-            raise RepositoryError(msg) from e
+            commit = load_commit(self.objects_dir(), commit_hash)
+            root_tree = load_tree(self.objects_dir(), commit.tree_hash)
+            return root_tree, None
+        
+        def _make_lookup(mem_trees: dict[str, Tree] | None):
+            if mem_trees is None:
+                return lambda tree_hash: load_tree(self.objects_dir(), tree_hash)
 
-        if commit1 is not None and commit2 is not None and commit1.tree_hash == commit2.tree_hash:
-            return []
+            def _lookup(tree_hash: str) -> Tree:
+                if tree_hash in mem_trees:
+                    return mem_trees[tree_hash]
+                return load_tree(self.objects_dir(), tree_hash)
 
-        def _load_tree_for_diff(tree_hash: str) -> Tree:
-            if tree_hash in mem_trees:
-                return mem_trees[tree_hash]
-            return load_tree(self.objects_dir(), tree_hash)
+            return _lookup
 
         try:
-            if tree1 is None:
-                tree1 = _load_tree_for_diff(commit1.tree_hash)
-            if tree2 is None:
-                tree2 = _load_tree_for_diff(commit2.tree_hash)
+            tree1, mem1 = _source_to_tree(source1)
+            tree2, mem2 = _source_to_tree(source2)
+            lookup1 = _make_lookup(mem1)
+            lookup2 = _make_lookup(mem2)
+            # Normalize order: directory snapshot is treated as the "new" side.
+            if mem1 is not None and mem2 is None:
+                tree1, tree2 = tree2, tree1
+                lookup1, lookup2 = lookup2, lookup1            
         except Exception as e:
-            msg = 'Error loading tree'
+            msg = 'Error loading commit or tree'
             raise RepositoryError(msg) from e
-        
-        # If exactly one side is a directory snapshot, treat the directory as the "new" side
-        if dir1 and not dir2:
-            tree1, tree2 = tree2, tree1
-
 
         top_level_diff = Diff(TreeRecord(TreeRecordType.TREE, '', ''), None, [])
         stack = [(tree1, tree2, top_level_diff)]
-        
+
         potentially_added: dict[str, Diff] = {}
         potentially_removed: dict[str, Diff] = {}
-        
+
         while stack:
             current_tree1, current_tree2, parent_diff = stack.pop()
             records1 = current_tree1.records if current_tree1 else {}
@@ -526,12 +515,12 @@ class Repository:
                         local_diff = MovedToDiff(record1, parent_diff, [], None)
                         moved_from_diff = MovedFromDiff(added_diff.record, added_diff.parent, [], local_diff)
                         local_diff.moved_to = moved_from_diff
-                        
+
                         # Replace the original added diff with a moved-from diff
                         added_diff.parent.children = (
                             [_ if _.record.hash != record1.hash
-                            else moved_from_diff
-                            for _ in added_diff.parent.children])
+                             else moved_from_diff
+                             for _ in added_diff.parent.children])
 
                     else:
                         local_diff = RemovedDiff(record1, parent_diff, [])
@@ -544,25 +533,24 @@ class Repository:
                     # This record is identical in both trees, so no diff is needed
                     if record1.hash == record2.hash:
                         continue
-                    
+
                     # If the record is a tree, we need to recursively compare the trees
                     if record1.type == TreeRecordType.TREE and record2.type == TreeRecordType.TREE:
                         subtree_diff = ModifiedDiff(record1, parent_diff, [])
-                        
+
                         try:
-                            tree1 = _load_tree_for_diff(record1.hash)
-                            tree2 = _load_tree_for_diff(record2.hash)
+                            subtree1 = lookup1(record1.hash)
+                            subtree2 = lookup2(record2.hash)
                         except Exception as e:
                             msg = 'Error loading subtree for diff'
                             raise RepositoryError(msg) from e
 
-                        stack.append((tree1, tree2, subtree_diff))
+                        stack.append((subtree1, subtree2, subtree_diff))
                         parent_diff.children.append(subtree_diff)
-       
                     else:
                         modified_diff = ModifiedDiff(record1, parent_diff, [])
                         parent_diff.children.append(modified_diff)
-                    
+
             for name, record2 in records2.items():
                 if name not in records1:
                     # This name is in the new tree but not in the old tree, so it was either
@@ -580,9 +568,9 @@ class Repository:
                         # Create a new diff for the moved record
                         removed_diff.parent.children = (
                             [_ if _.record.hash != record2.hash
-                            else moved_to_diff
-                            for _ in removed_diff.parent.children])
-                        
+                             else moved_to_diff
+                             for _ in removed_diff.parent.children])
+
                     else:
                         local_diff = AddedDiff(record2, parent_diff, [])
                         potentially_added[record2.hash] = local_diff
