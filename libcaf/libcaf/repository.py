@@ -8,7 +8,7 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Concatenate
-
+from .fs_tree import build_tree_from_fs
 from . import Blob, Commit, Tree, TreeRecord, TreeRecordType
 from .constants import (DEFAULT_BRANCH, DEFAULT_REPO_DIR, HASH_CHARSET, HASH_LENGTH, HEADS_DIR, HEAD_FILE,
                         OBJECTS_SUBDIR, REFS_DIR)
@@ -425,46 +425,71 @@ class Repository:
         except Exception as e:
             msg = f'Error loading commit {current_hash}'
             raise RepositoryError(msg) from e
+        
+    def _source_to_tree(self, source: Ref | str | Path) -> tuple[Tree, dict[str, Tree] | None]:
+        # Path case: either a Path object or a string that points to an existing directory
+        if isinstance(source, Path):
+            if source.exists() and source.is_dir():
+                root_tree, _, subtrees = build_tree_from_fs(source, self.repo_dir.name)
+                return root_tree, subtrees
+        # Note: directory paths take precedence over ref-like strings (even if the name looks like a hash).
+        if isinstance(source, str):
+            p = Path(source)
+            if p.exists() and p.is_dir():
+                root_tree, _, subtrees = build_tree_from_fs(p, self.repo_dir.name)
+                return root_tree, subtrees
+
+        # Commit/ref case (Ref object, commit hash string, ref string)
+        commit_hash = self.resolve_ref(source)
+        if commit_hash is None:
+            msg = f'Cannot resolve reference {source}'
+            raise RefError(msg)
+
+        commit = load_commit(self.objects_dir(), commit_hash)
+        root_tree = load_tree(self.objects_dir(), commit.tree_hash)
+        return root_tree, None
+        
+    def _make_lookup(self, mem_trees: dict[str, Tree] | None):
+        if mem_trees is None:
+            return lambda tree_hash: load_tree(self.objects_dir(), tree_hash)
+
+        def _lookup(tree_hash: str) -> Tree:
+            if tree_hash in mem_trees:
+                return mem_trees[tree_hash]
+            return load_tree(self.objects_dir(), tree_hash)
+
+        return _lookup
 
     @requires_repo
-    def diff_commits(self, commit_ref1: Ref | None = None, commit_ref2: Ref | None = None) -> Sequence[Diff]:
-        """Generate a diff between two commits in the repository.
+    def diff(
+        self,
+        source1: Ref | str | Path | None = None,
+        source2: Ref | str | Path | None = None,
+    ) -> Sequence[Diff]:
+        """Generate a diff between two repository commits or directory snapshots.
 
-        :param commit_ref1: The reference to the first commit. If None, defaults to the current HEAD.
-        :param commit_ref2: The reference to the second commit. If None, defaults to the current HEAD.
-        :return: A list of Diff objects representing the differences between the two commits.
+        :param source1: First commit reference or directory path.
+        :param source2:: Second commit reference or directory path.
+        :return: A list of Diff objects representing the differences between the two inputs.
         :raises RepositoryError: If a commit or tree cannot be loaded.
         :raises RepositoryNotFoundError: If the repository does not exist."""
-        if commit_ref1 is None:
-            commit_ref1 = self.head_ref()
-        if commit_ref2 is None:
-            commit_ref2 = self.head_ref()
-
-        try:
-            commit_hash1 = self.resolve_ref(commit_ref1)
-            commit_hash2 = self.resolve_ref(commit_ref2)
-
-            if commit_hash1 is None:
-                msg = f'Cannot resolve reference {commit_ref1}'
-                raise RefError(msg)
-            if commit_hash2 is None:
-                msg = f'Cannot resolve reference {commit_ref2}'
-                raise RefError(msg)
-
-            commit1 = load_commit(self.objects_dir(), commit_hash1)
-            commit2 = load_commit(self.objects_dir(), commit_hash2)
-        except Exception as e:
-            msg = 'Error loading commit'
-            raise RepositoryError(msg) from e
-
-        if commit1.tree_hash == commit2.tree_hash:
+        if source1 is None:
+            source1 = self.head_ref()
+        if source2 is None:
+            source2 = self.head_ref()
+            
+        # Early exit: same input on both sides
+        if source1 == source2:
             return []
 
         try:
-            tree1 = load_tree(self.objects_dir(), commit1.tree_hash)
-            tree2 = load_tree(self.objects_dir(), commit2.tree_hash)
+            tree1, mem1 = self._source_to_tree(source1)
+            tree2, mem2 = self._source_to_tree(source2)
+            lookup1 = self._make_lookup(mem1)
+            lookup2 = self._make_lookup(mem2)          
+        
         except Exception as e:
-            msg = 'Error loading tree'
+            msg = 'Error loading commit or tree'
             raise RepositoryError(msg) from e
 
         top_level_diff = Diff(TreeRecord(TreeRecordType.TREE, '', ''), None, [])
@@ -515,13 +540,13 @@ class Repository:
                         subtree_diff = ModifiedDiff(record1, parent_diff, [])
 
                         try:
-                            tree1 = load_tree(self.objects_dir(), record1.hash)
-                            tree2 = load_tree(self.objects_dir(), record2.hash)
+                            subtree1 = lookup1(record1.hash)
+                            subtree2 = lookup2(record2.hash)
                         except Exception as e:
                             msg = 'Error loading subtree for diff'
                             raise RepositoryError(msg) from e
 
-                        stack.append((tree1, tree2, subtree_diff))
+                        stack.append((subtree1, subtree2, subtree_diff))
                         parent_diff.children.append(subtree_diff)
                     else:
                         modified_diff = ModifiedDiff(record1, parent_diff, [])
@@ -554,7 +579,7 @@ class Repository:
                     parent_diff.children.append(local_diff)
 
         return top_level_diff.children
-
+       
     def head_file(self) -> Path:
         """Get the path to the HEAD file within the repository.
 
