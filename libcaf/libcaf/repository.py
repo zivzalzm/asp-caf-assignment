@@ -444,6 +444,10 @@ class Repository:
         if source2 is None:
             source2 = self.head_ref()
             
+        # Early exit: same input on both sides
+        if source1 == source2:
+            return []
+            
         def _source_to_tree(source: Ref | str | Path) -> tuple[Tree, dict[str, Tree] | None]:
         # Path case: either a Path object or a string that points to an existing directory
             if isinstance(source, Path):
