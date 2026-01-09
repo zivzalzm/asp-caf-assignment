@@ -8,6 +8,6 @@ HEAD_FILE = 'HEAD'
 DEFAULT_BRANCH = 'main'
 REFS_DIR = 'refs'
 HEADS_DIR = 'heads'
-
+MERGE_DIR = 'merge'
 HASH_LENGTH = hash_length()
 HASH_CHARSET = '0123456789abcdef'
