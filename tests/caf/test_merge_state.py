@@ -6,7 +6,7 @@ from libcaf.repository import Repository
 def test_start_merge_creates_merge_dir(temp_repo: Repository) -> None:
     temp_repo.start_merge()
 
-    merge_dir = temp_repo.caf_dir() / "merge"
+    merge_dir = temp_repo.repo_path() / "merge"
     assert merge_dir.exists()
     assert merge_dir.is_dir()
 

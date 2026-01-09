@@ -11,7 +11,7 @@ from typing import Concatenate
 from .fs_tree import build_tree_from_fs
 from . import Blob, Commit, Tree, TreeRecord, TreeRecordType
 from .constants import (DEFAULT_BRANCH, DEFAULT_REPO_DIR, HASH_CHARSET, HASH_LENGTH, HEADS_DIR, HEAD_FILE,
-                        OBJECTS_SUBDIR, REFS_DIR)
+                        OBJECTS_SUBDIR, REFS_DIR, MERGE_DIR)
 from .plumbing import hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree
 from .ref import HashRef, Ref, RefError, SymRef, read_ref, write_ref
 
@@ -586,6 +586,28 @@ class Repository:
         :return: The path to the HEAD file."""
         return self.repo_path() / HEAD_FILE
 
+    @requires_repo
+    def start_merge(self) -> None:
+        """Put the repository into a merge-in-progress state.
+        The merge state is represented by the presence of a `.caf/merge` directory.
+
+        :raises RepositoryError: If a merge is already in progress.
+        :raises RepositoryNotFoundError: If the repository does not exist."""
+        merge_dir = self.repo_path() / MERGE_DIR
+
+        if merge_dir.exists():
+            raise RepositoryError('Merge already in progress')
+
+        merge_dir.mkdir()
+
+    @requires_repo
+    def is_merging(self) -> bool:
+        """Check if the repository is currently in a merge-in-progress state.
+
+        :return: True if a merge is in progress, False otherwise.
+        :raises RepositoryNotFoundError: If the repository does not exist."""
+        merge_dir = self.repo_path() / MERGE_DIR
+        return merge_dir.exists()
 
 def branch_ref(branch: str) -> SymRef:
     """Create a symbolic reference for a branch name.
