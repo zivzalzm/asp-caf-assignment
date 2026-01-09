@@ -610,6 +610,34 @@ class Repository:
         merge_dir = self.repo_path() / MERGE_DIR
         return merge_dir.exists()
 
+    @requires_repo
+    def abort_merge(self) -> None:
+        """Abort an in-progress merge and return the repository to a normal state.
+        This removes the merge-in-progress marker without creating a merge commit.
+
+        :raises RepositoryError: If no merge is currently in progress.
+        :raises RepositoryNotFoundError: If the repository does not exist."""
+        merge_dir = self.repo_path() / MERGE_DIR
+
+        if not merge_dir.exists():
+            raise RepositoryError('No merge in progress to abort')
+
+        shutil.rmtree(merge_dir)
+
+    @requires_repo
+    def complete_merge(self) -> None:
+        """Complete a merge operation and exit the merge-in-progress state.
+        This is expected to be called after a successful merge commit is created.
+
+        :raises RepositoryError: If no merge is currently in progress.
+        :raises RepositoryNotFoundError: If the repository does not exist."""
+        merge_dir = self.repo_path() / MERGE_DIR
+
+        if not merge_dir.exists():
+            raise RepositoryError('No merge in progress to complete')
+
+        shutil.rmtree(merge_dir)
+
 def branch_ref(branch: str) -> SymRef:
     """Create a symbolic reference for a branch name.
 
