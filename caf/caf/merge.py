@@ -85,3 +85,16 @@ def merge(repo: Repository, target: HashRef) -> MergeCase:
 
     elif merge_base != head and merge_base != target:
         raise NotImplementedError("Three-way merge is not implemented yet.")
+    
+def create_merge_commit(repo: Repository, merged_tree: HashRef, head: HashRef, target: HashRef) -> HashRef:
+    """
+    Create a merge commit from a merged tree snapshot.
+
+    :param repo: The repository in which the merge is performed
+    :param merged_tree: The hash of the merged tree snapshot
+    :param head: The current HEAD commit
+    :param target: The commit being merged into HEAD
+    :return: The hash of the newly created merge commit
+    :raises NotImplementedError: Since merge commit creation is not implemented yet
+    """
+    raise NotImplementedError("Merge commit creation is not implemented yet.")
