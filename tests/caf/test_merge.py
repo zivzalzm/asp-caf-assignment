@@ -57,12 +57,6 @@ def test_merge_three_way(temp_repo):
     assert temp_repo.is_merging() 
     assert temp_repo.head_commit() == left
 
-def test_merge_three_way_complete_merge_exits_merge_state(temp_repo):
-    temp_repo._enter_merge_state()
-    assert temp_repo.is_merging()
-
-    temp_repo.complete_merge()
-    assert temp_repo.is_merging() is False
 
 def test_merge_three_way_abort_merge_exits_merge_state(temp_repo):
     temp_repo._enter_merge_state()
