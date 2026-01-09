@@ -587,9 +587,10 @@ class Repository:
         return self.repo_path() / HEAD_FILE
 
     @requires_repo
-    def start_merge(self) -> None:
+    def _enter_merge_state(self) -> None:
         """Put the repository into a merge-in-progress state.
         The merge state is represented by the presence of a `.caf/merge` directory.
+        This state is entered as a consequence of handling a three-way merge.
 
         :raises RepositoryError: If a merge is already in progress.
         :raises RepositoryNotFoundError: If the repository does not exist."""

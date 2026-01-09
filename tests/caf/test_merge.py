@@ -17,6 +17,8 @@ def test_merge_disconnected_histories(temp_repo):
     result = merge(temp_repo, root2_ref)
     assert result == MergeCase.DISCONNECTED
     assert temp_repo.head_commit() == child1
+    assert temp_repo.is_merging() is False
+
 
 def test_merge_up_to_date(temp_repo):
     root_target = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -25,6 +27,8 @@ def test_merge_up_to_date(temp_repo):
     result = merge(temp_repo, root_target)
     assert result == MergeCase.UP_TO_DATE
     assert temp_repo.head_commit() == child_head
+    assert temp_repo.is_merging() is False
+
 
 def test_merge_fast_forward(temp_repo):
     root_head = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -36,6 +40,8 @@ def test_merge_fast_forward(temp_repo):
     result = merge(temp_repo, child_target_ref)
     assert result == MergeCase.FAST_FORWARD
     assert temp_repo.head_commit() == child_target_ref
+    assert temp_repo.is_merging() is False
+
 
 def test_merge_three_way(temp_repo):
     base = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -48,4 +54,5 @@ def test_merge_three_way(temp_repo):
 
     result = merge(temp_repo, right)
     assert result == MergeCase.THREE_WAY
+    assert temp_repo.is_merging() 
     assert temp_repo.head_commit() == left

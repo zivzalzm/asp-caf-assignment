@@ -84,4 +84,5 @@ def merge(repo: Repository, target: HashRef) -> MergeCase:
         return MergeCase.FAST_FORWARD
 
     elif merge_base != head and merge_base != target:
-        raise NotImplementedError("Three-way merge is not implemented yet.")
+        repo._enter_merge_state()
+        return MergeCase.THREE_WAY
