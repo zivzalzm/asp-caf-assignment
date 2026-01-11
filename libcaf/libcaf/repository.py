@@ -12,7 +12,7 @@ from .fs_tree import build_tree_from_fs
 from . import Blob, Commit, Tree, TreeRecord, TreeRecordType
 from .constants import (DEFAULT_BRANCH, DEFAULT_REPO_DIR, HASH_CHARSET, HASH_LENGTH, HEADS_DIR, HEAD_FILE,
                         OBJECTS_SUBDIR, REFS_DIR)
-from .plumbing import hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree
+from .plumbing import hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree, open_content_for_reading
 from .ref import HashRef, Ref, RefError, SymRef, read_ref, write_ref
 
 
@@ -425,6 +425,28 @@ class Repository:
         except Exception as e:
             msg = f'Error loading commit {current_hash}'
             raise RepositoryError(msg) from e
+    
+    def _write_tree_to_working_dir(self, tree: Tree, base_path: Path) -> None:
+        """Restore a Tree object to the physical filesystem."""
+        for name, record in tree.records.items():
+            path = base_path / name
+            if record.type == TreeRecordType.BLOB:
+                # Read blob content using plumbing and write to disk
+                with open_content_for_reading(self.objects_dir(), record.hash) as src:
+                    path.write_bytes(src.read())
+            elif record.type == TreeRecordType.TREE:
+                path.mkdir(exist_ok=True)
+                subtree = load_tree(self.objects_dir(), record.hash)
+                self._write_tree_to_working_dir(subtree, path)
+                
+    def _clear_working_directory(self) -> None:
+        for item in self.working_dir.iterdir():
+            if item.name == self.repo_dir.name:
+                continue       
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()     
         
     def _source_to_tree(self, source: Ref | str | Path) -> tuple[Tree, dict[str, Tree] | None]:
         # Path case: either a Path object or a string that points to an existing directory
@@ -579,6 +601,53 @@ class Repository:
                     parent_diff.children.append(local_diff)
 
         return top_level_diff.children
+    
+    @requires_repo
+    def checkout(self, target: str) -> None:
+        """Checkout the repository to a specific branch or commit."""
+        target_hash = None
+        is_branch = False
+        
+        # Resolve target reference
+        t_ref = branch_ref(target)
+        if (self.refs_dir() / t_ref).exists():
+            target_hash = self.resolve_ref(t_ref)
+            is_branch = True
+        else:
+            try:
+                target_hash = self.resolve_ref(target)
+            except (RefError, FileNotFoundError):
+                raise RefError(f"Cannot resolve {target}")
+
+        # Handle empty branches
+        if not target_hash:
+            if is_branch:
+                self._clear_working_directory()
+                write_ref(self.head_file(), branch_ref(target))
+                return
+            raise RefError(f"Target '{target}' has no history.")
+
+        # Conflict Detection: Compare current state to working directory to protect local changes
+        current = self.head_ref()
+        # If current branch is empty, diff against an empty directory to detect untracked files
+        base = current if self.resolve_ref(current) else self.repo_path() / ".empty"
+        if isinstance(base, Path): base.mkdir(exist_ok=True)
+
+        try:
+            if self.diff(source1=base, source2=self.working_dir):
+                raise RepositoryError("Checkout aborted: local changes would be overwritten.")
+        finally:
+            if isinstance(base, Path): shutil.rmtree(base, ignore_errors=True)
+
+        # Restore files from target tree
+        self._clear_working_directory()
+        target_commit = load_commit(self.objects_dir(), target_hash)
+        target_tree = load_tree(self.objects_dir(), target_commit.tree_hash)
+        self._write_tree_to_working_dir(target_tree, self.working_dir)
+
+        # Update HEAD
+        new_head = branch_ref(target) if is_branch else HashRef(target_hash)
+        write_ref(self.head_file(), new_head)
        
     def head_file(self) -> Path:
         """Get the path to the HEAD file within the repository.
