@@ -1,7 +1,8 @@
+import pytest
 import time
 from libcaf import Commit
 from libcaf.repository import Repository
-from caf.merge import merge, MergeCase
+from caf.merge import merge, MergeCase, perform_merge
 from libcaf.plumbing import hash_object, save_commit
 from libcaf.ref import HashRef
 
@@ -63,4 +64,23 @@ def test_merge_three_way_abort_merge_exits_merge_state(temp_repo):
     assert temp_repo.is_merging()
 
     temp_repo.abort_merge()
+    assert temp_repo.is_merging() is False
+
+
+def test_merge_three_way_conflict_raises_not_implemented(temp_repo):
+    base = temp_repo.commit_working_dir(author="Test Author", message="base")
+
+    head = temp_repo.commit_working_dir(author="Test Author", message="head")
+
+    target_commit = Commit("conflicting_tree_hash", "Test Author", "target", int(time.time()), [base])
+    target = HashRef(hash_object(target_commit))
+    save_commit(temp_repo.objects_dir(), target_commit)
+
+    result = merge(temp_repo, target)
+    assert result == MergeCase.THREE_WAY
+    assert temp_repo.is_merging()
+
+    with pytest.raises(NotImplementedError):
+        perform_merge(temp_repo)
+
     assert temp_repo.is_merging() is False
