@@ -633,12 +633,11 @@ class Repository:
         :raises RepositoryError: If the target commit or tree cannot be loaded.
         :raises RepositoryNotFoundError: If the repository does not exist.
         """
-        # Conflict detection must happen first (even if target is an empty branch)
         current = self.head_ref()
         try:
             current_hash = self.resolve_ref(current)
             if current_hash is None:
-                # Empty current branch: any files in working dir are "new files" and must block checkout
+                # Empty current branch
                 wd_tree, _ = self._source_to_tree(self.working_dir)
                 if wd_tree.records:
                     raise RepositoryError('Checkout aborted: local changes would be overwritten.')
@@ -665,7 +664,7 @@ class Repository:
                 return
             raise RefError(f'Target {target} has no history.')
 
-        # Load objects before clearing working directory
+        # Load objects
         try:
             target_commit = load_commit(self.objects_dir(), target_hash)
             target_tree = load_tree(self.objects_dir(), target_commit.tree_hash)
@@ -682,7 +681,6 @@ class Repository:
             self.update_ref("HEAD", HashRef(target_hash))
 
 
-       
     def head_file(self) -> Path:
         """Get the path to the HEAD file within the repository.
 
