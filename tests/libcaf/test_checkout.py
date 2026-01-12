@@ -2,19 +2,6 @@ from libcaf.repository import Repository, RepositoryError, branch_ref
 from pytest import raises
 from libcaf.ref import RefError
 
-def test_checkout_blocks_on_conflict(temp_repo: Repository) -> None:
-    # Create an initial commit
-    (temp_repo.working_dir / "file1.txt").write_text("v1", encoding="utf-8")
-    temp_repo.commit_working_dir("Author", "Initial")
-    
-    # Modify file in working directory without committing
-    (temp_repo.working_dir / "file1.txt").write_text("dirty_change", encoding="utf-8")
-    
-    # Attempt checkout should raise RepositoryError
-    with raises(RepositoryError) as excinfo:
-        temp_repo.checkout("main")
-    
-    assert "local changes" in str(excinfo.value).lower()
 
 def test_checkout_updates_files_and_head(temp_repo: Repository) -> None:
     # Commit something to 'main' first

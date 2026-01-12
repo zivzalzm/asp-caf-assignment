@@ -237,7 +237,11 @@ class Repository:
         :param new_ref: The new reference value to set.
         :raises RepositoryError: If the reference does not exist.
         :raises RepositoryNotFoundError: If the repository does not exist."""
-        ref_path = self.refs_dir() / ref_name
+        # Handle the special case for HEAD
+        if ref_name == "HEAD":
+            ref_path = self.head_file()
+        else:
+            ref_path = self.refs_dir() / ref_name
 
         if not ref_path.exists():
             msg = f'Reference "{ref_name}" does not exist.'
@@ -629,8 +633,24 @@ class Repository:
         :raises RepositoryError: If the target commit or tree cannot be loaded.
         :raises RepositoryNotFoundError: If the repository does not exist.
         """
+        # Conflict detection must happen first (even if target is an empty branch)
+        current = self.head_ref()
+        try:
+            current_hash = self.resolve_ref(current)
+            if current_hash is None:
+                # Empty current branch: any files in working dir are "new files" and must block checkout
+                wd_tree, _ = self._source_to_tree(self.working_dir)
+                if wd_tree.records:
+                    raise RepositoryError('Checkout aborted: local changes would be overwritten.')
+            else:
+                if self.diff(current, self.working_dir):
+                    raise RepositoryError('Checkout aborted: local changes would be overwritten.')
+        except RepositoryError:
+            raise
+        except Exception as e:
+            raise RepositoryError('Error during checkout diff') from e
 
-        # Resolve target to a commit hash
+        # Resolve target to commit hash
         try:
             target_hash = self.resolve_ref(target)
         except Exception as e:
@@ -640,22 +660,12 @@ class Repository:
         if target_hash is None:
             if isinstance(target, SymRef):
                 self._clear_working_directory()
-                self.update_ref(HEAD_FILE, target)
+                # HEAD is not in refs/, so write it directly
+                write_ref(self.head_file(), target)
                 return
             raise RefError(f'Target {target} has no history.')
 
-        # Conflict detection
-        current = self.head_ref()
-        try:
-            if self.diff(current, self.working_dir):
-                raise RepositoryError(
-                    'Checkout aborted: local changes would be overwritten.'
-                )
-        except RepositoryError:
-            raise
-        except Exception as e:
-            raise RepositoryError('Error during checkout diff') from e
-
+        # Load objects before clearing working directory
         try:
             target_commit = load_commit(self.objects_dir(), target_hash)
             target_tree = load_tree(self.objects_dir(), target_commit.tree_hash)
@@ -665,7 +675,12 @@ class Repository:
         self._clear_working_directory()
         self._write_tree_to_working_dir(target_tree, self.working_dir)
 
-        self.update_ref(HEAD_FILE, target)
+        # Update HEAD
+        if isinstance(target, SymRef):
+            self.update_ref("HEAD", target)
+        else:
+            self.update_ref("HEAD", HashRef(target_hash))
+
 
        
     def head_file(self) -> Path:
