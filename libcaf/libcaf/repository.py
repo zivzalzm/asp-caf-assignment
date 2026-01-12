@@ -8,11 +8,12 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Concatenate
+from pathlib import Path
 from .fs_tree import build_tree_from_fs
 from . import Blob, Commit, Tree, TreeRecord, TreeRecordType
 from .constants import (DEFAULT_BRANCH, DEFAULT_REPO_DIR, HASH_CHARSET, HASH_LENGTH, HEADS_DIR, HEAD_FILE,
                         OBJECTS_SUBDIR, REFS_DIR)
-from .plumbing import hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree
+from .plumbing import hash_object, load_commit, load_tree, save_commit, save_file_content, save_tree, open_content_for_reading
 from .ref import HashRef, Ref, RefError, SymRef, read_ref, write_ref
 
 
@@ -236,7 +237,11 @@ class Repository:
         :param new_ref: The new reference value to set.
         :raises RepositoryError: If the reference does not exist.
         :raises RepositoryNotFoundError: If the repository does not exist."""
-        ref_path = self.refs_dir() / ref_name
+        # Handle the special case for HEAD
+        if ref_name == "HEAD":
+            ref_path = self.head_file()
+        else:
+            ref_path = self.refs_dir() / ref_name
 
         if not ref_path.exists():
             msg = f'Reference "{ref_name}" does not exist.'
@@ -425,6 +430,43 @@ class Repository:
         except Exception as e:
             msg = f'Error loading commit {current_hash}'
             raise RepositoryError(msg) from e
+    
+    def _write_tree_to_working_dir(self, tree: Tree, path: Path) -> None:
+        """Write a tree structure to the working directory."""
+        stack: list[tuple[Tree, Path]] = [(tree, path)]
+
+        while stack:
+            current_tree, current_path = stack.pop()
+            current_path.mkdir(parents=True, exist_ok=True)
+
+            for record in current_tree.records.values():
+                record_path = current_path / record.name
+
+                if record.type == TreeRecordType.BLOB:
+                    try:
+                        with open_content_for_reading(self.objects_dir(), record.hash) as src:
+                            with record_path.open('wb') as dest:
+                                shutil.copyfileobj(src, dest)
+                    except Exception as e:
+                        raise RepositoryError('Error writing file during checkout') from e
+
+                elif record.type == TreeRecordType.TREE:
+                    try:
+                        record_path.mkdir(parents=True, exist_ok=True)
+                        subtree = load_tree(self.objects_dir(), record.hash)
+                    except Exception as e:
+                        raise RepositoryError('Error loading subtree for checkout') from e
+
+                    stack.append((subtree, record_path))
+                
+    def _clear_working_directory(self) -> None:
+        for item in self.working_dir.iterdir():
+            if item.name == self.repo_dir.name:
+                continue       
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()     
         
     def _source_to_tree(self, source: Ref | str | Path) -> tuple[Tree, dict[str, Tree] | None]:
         # Path case: either a Path object or a string that points to an existing directory
@@ -579,7 +621,66 @@ class Repository:
                     parent_diff.children.append(local_diff)
 
         return top_level_diff.children
-       
+    
+    @requires_repo
+    def checkout(self, target: Ref) -> None:
+        """Checkout the repository to a specific branch or commit.
+
+        :param target: The reference to checkout (symbolic ref or hash ref).
+        :raises RefError: If the reference cannot be resolved.
+        :raises RefError: If the reference has no history.
+        :raises RepositoryError: If local changes would be overwritten.
+        :raises RepositoryError: If the target commit or tree cannot be loaded.
+        :raises RepositoryNotFoundError: If the repository does not exist.
+        """
+        current = self.head_ref()
+        try:
+            current_hash = self.resolve_ref(current)
+            if current_hash is None:
+                # Empty current branch
+                wd_tree, _ = self._source_to_tree(self.working_dir)
+                if wd_tree.records:
+                    raise RepositoryError('Checkout aborted: local changes would be overwritten.')
+            else:
+                if self.diff(current, self.working_dir):
+                    raise RepositoryError('Checkout aborted: local changes would be overwritten.')
+        except RepositoryError:
+            raise
+        except Exception as e:
+            raise RepositoryError('Error during checkout diff') from e
+
+        # Resolve target to commit hash
+        try:
+            target_hash = self.resolve_ref(target)
+        except Exception as e:
+            raise RefError(f'Cannot resolve reference {target}') from e
+
+        # Handle empty branch
+        if target_hash is None:
+            if isinstance(target, SymRef):
+                self._clear_working_directory()
+                # HEAD is not in refs/, so write it directly
+                write_ref(self.head_file(), target)
+                return
+            raise RefError(f'Target {target} has no history.')
+
+        # Load objects
+        try:
+            target_commit = load_commit(self.objects_dir(), target_hash)
+            target_tree = load_tree(self.objects_dir(), target_commit.tree_hash)
+        except Exception as e:
+            raise RepositoryError('Error loading target objects') from e
+
+        self._clear_working_directory()
+        self._write_tree_to_working_dir(target_tree, self.working_dir)
+
+        # Update HEAD
+        if isinstance(target, SymRef):
+            self.update_ref("HEAD", target)
+        else:
+            self.update_ref("HEAD", HashRef(target_hash))
+
+
     def head_file(self) -> Path:
         """Get the path to the HEAD file within the repository.
 
