@@ -8,6 +8,7 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Concatenate
+from pathlib import Path
 from .fs_tree import build_tree_from_fs
 from . import Blob, Commit, Tree, TreeRecord, TreeRecordType
 from .constants import (DEFAULT_BRANCH, DEFAULT_REPO_DIR, HASH_CHARSET, HASH_LENGTH, HEADS_DIR, HEAD_FILE,
@@ -426,18 +427,33 @@ class Repository:
             msg = f'Error loading commit {current_hash}'
             raise RepositoryError(msg) from e
     
-    def _write_tree_to_working_dir(self, tree: Tree, base_path: Path) -> None:
-        """Restore a Tree object to the physical filesystem."""
-        for name, record in tree.records.items():
-            path = base_path / name
-            if record.type == TreeRecordType.BLOB:
-                # Read blob content using plumbing and write to disk
-                with open_content_for_reading(self.objects_dir(), record.hash) as src:
-                    path.write_bytes(src.read())
-            elif record.type == TreeRecordType.TREE:
-                path.mkdir(exist_ok=True)
-                subtree = load_tree(self.objects_dir(), record.hash)
-                self._write_tree_to_working_dir(subtree, path)
+    def _write_tree_to_working_dir(self, tree: Tree, path: Path) -> None:
+        """Write a tree structure to the working directory."""
+        stack: list[tuple[Tree, Path]] = [(tree, path)]
+
+        while stack:
+            current_tree, current_path = stack.pop()
+            current_path.mkdir(parents=True, exist_ok=True)
+
+            for record in current_tree.records.values():
+                record_path = current_path / record.name
+
+                if record.type == TreeRecordType.BLOB:
+                    try:
+                        with open_content_for_reading(self.objects_dir(), record.hash) as src:
+                            with record_path.open('wb') as dest:
+                                shutil.copyfileobj(src, dest)
+                    except Exception as e:
+                        raise RepositoryError('Error writing file during checkout') from e
+
+                elif record.type == TreeRecordType.TREE:
+                    try:
+                        record_path.mkdir(parents=True, exist_ok=True)
+                        subtree = load_tree(self.objects_dir(), record.hash)
+                    except Exception as e:
+                        raise RepositoryError('Error loading subtree for checkout') from e
+
+                    stack.append((subtree, record_path))
                 
     def _clear_working_directory(self) -> None:
         for item in self.working_dir.iterdir():
