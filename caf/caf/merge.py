@@ -85,22 +85,12 @@ def merge(repo: Repository, target: HashRef) -> MergeCase:
 
     elif merge_base != head and merge_base != target:
         repo._enter_merge_state()
-        return MergeCase.THREE_WAY
-    
 
-def perform_merge(repo: Repository) -> None:
-    """
-    Perform a three-way merge.
-    Assumes the repository is already in merge state.
-    Currently does not support merge conflicts.
+        if not repo.is_merging():
+            raise RuntimeError("No merge in progress")
 
-    :raises: NotImplementedError: always, since conflict resolution isn't implemented yet."""
-    if not repo.is_merging():
-        raise RuntimeError("No merge in progress")
-
-    try:
-        # Placeholder for actual merge execution using merge lib
-        raise NotImplementedError("Merge conflicts are not supported yet")
-    finally:
-        # Ensure we always leave merge state on failure
-        repo.abort_merge()
+        try:
+            raise NotImplementedError("Three-way merge is not implemented yet")
+        except Exception as e:
+            repo.abort_merge()
+            raise e
