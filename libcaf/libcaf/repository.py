@@ -619,51 +619,54 @@ class Repository:
         return top_level_diff.children
     
     @requires_repo
-    def checkout(self, target: str) -> None:
-        """Checkout the repository to a specific branch or commit."""
-        target_hash = None
-        is_branch = False
-        
-        # Resolve target reference
-        t_ref = branch_ref(target)
-        if (self.refs_dir() / t_ref).exists():
-            target_hash = self.resolve_ref(t_ref)
-            is_branch = True
-        else:
-            try:
-                target_hash = self.resolve_ref(target)
-            except (RefError, FileNotFoundError):
-                raise RefError(f"Cannot resolve {target}")
+    def checkout(self, target: Ref) -> None:
+        """Checkout the repository to a specific branch or commit.
 
-        # Handle empty branches
-        if not target_hash:
-            if is_branch:
+        :param target: The reference to checkout (symbolic ref or hash ref).
+        :raises RefError: If the reference cannot be resolved.
+        :raises RefError: If the reference has no history.
+        :raises RepositoryError: If local changes would be overwritten.
+        :raises RepositoryError: If the target commit or tree cannot be loaded.
+        :raises RepositoryNotFoundError: If the repository does not exist.
+        """
+
+        # Resolve target to a commit hash
+        try:
+            target_hash = self.resolve_ref(target)
+        except Exception as e:
+            raise RefError(f'Cannot resolve reference {target}') from e
+
+        # Handle empty branch
+        if target_hash is None:
+            if isinstance(target, SymRef):
                 self._clear_working_directory()
-                write_ref(self.head_file(), branch_ref(target))
+                self.update_ref(HEAD_FILE, target)
                 return
-            raise RefError(f"Target '{target}' has no history.")
+            raise RefError(f'Target {target} has no history.')
 
-        # Conflict Detection: Compare current state to working directory to protect local changes
+        # Conflict detection
         current = self.head_ref()
-        # If current branch is empty, diff against an empty directory to detect untracked files
-        base = current if self.resolve_ref(current) else self.repo_path() / ".empty"
-        if isinstance(base, Path): base.mkdir(exist_ok=True)
+        try:
+            if self.diff(current, self.working_dir):
+                raise RepositoryError(
+                    'Checkout aborted: local changes would be overwritten.'
+                )
+        except RepositoryError:
+            raise
+        except Exception as e:
+            raise RepositoryError('Error during checkout diff') from e
 
         try:
-            if self.diff(source1=base, source2=self.working_dir):
-                raise RepositoryError("Checkout aborted: local changes would be overwritten.")
-        finally:
-            if isinstance(base, Path): shutil.rmtree(base, ignore_errors=True)
+            target_commit = load_commit(self.objects_dir(), target_hash)
+            target_tree = load_tree(self.objects_dir(), target_commit.tree_hash)
+        except Exception as e:
+            raise RepositoryError('Error loading target objects') from e
 
-        # Restore files from target tree
         self._clear_working_directory()
-        target_commit = load_commit(self.objects_dir(), target_hash)
-        target_tree = load_tree(self.objects_dir(), target_commit.tree_hash)
         self._write_tree_to_working_dir(target_tree, self.working_dir)
 
-        # Update HEAD
-        new_head = branch_ref(target) if is_branch else HashRef(target_hash)
-        write_ref(self.head_file(), new_head)
+        self.update_ref(HEAD_FILE, target)
+
        
     def head_file(self) -> Path:
         """Get the path to the HEAD file within the repository.
