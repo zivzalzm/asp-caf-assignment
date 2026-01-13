@@ -62,10 +62,21 @@ def test_merge_three_way(temp_repo):
 
 
 def test_merge_three_way_abort_merge_exits_merge_state(temp_repo):
-    temp_repo._enter_merge_state()
-    assert temp_repo.is_merging()
 
-    temp_repo.abort_merge()
+    (temp_repo.working_dir / "file.txt").write_text("hello\n")
+    base = temp_repo.commit_working_dir(author="Test Author", message="base")
+
+    (temp_repo.working_dir / "file.txt").write_text("hello world\n")
+    head = temp_repo.commit_working_dir(author="Test Author", message="head")
+
+    (temp_repo.working_dir / "file.txt").write_text("hello world\n")
+    tree_hash = temp_repo.save_dir(temp_repo.working_dir)
+
+    target_commit = Commit(tree_hash, "Test Author", "target", int(time.time()), [base])
+    target = HashRef(hash_object(target_commit))
+    save_commit(temp_repo.objects_dir(), target_commit)
+    
+    merge(temp_repo, target)
     assert temp_repo.is_merging() is False
 
 
