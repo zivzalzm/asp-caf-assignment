@@ -61,23 +61,49 @@ def test_merge_three_way(temp_repo):
     assert temp_repo.head_commit() == left
 
 
-def test_merge_three_way_abort_merge_exits_merge_state(temp_repo):
+def test_merge_three_way_clean_merge(temp_repo: Repository):
 
-    (temp_repo.working_dir / "file.txt").write_text("hello\n")
+    (temp_repo.working_dir / "file.txt").write_text("A\n")
     base = temp_repo.commit_working_dir(author="Test Author", message="base")
 
-    (temp_repo.working_dir / "file.txt").write_text("hello world\n")
+    (temp_repo.working_dir / "file.txt").write_text("A\nB\n")
     head = temp_repo.commit_working_dir(author="Test Author", message="head")
 
-    (temp_repo.working_dir / "file.txt").write_text("hello world\n")
+    (temp_repo.working_dir / "file.txt").write_text("A\nC\n")
     tree_hash = temp_repo.save_dir(temp_repo.working_dir)
 
-    target_commit = Commit(tree_hash, "Test Author", "target", int(time.time()), [base])
-    target = HashRef(hash_object(target_commit))
+    target_commit = Commit(tree_hash=tree_hash, author="Test Author", message="target", timestamp=int(time.time()), parents=[base])
+
+    target_ref = HashRef(hash_object(target_commit))
     save_commit(temp_repo.objects_dir(), target_commit)
-    
-    merge(temp_repo, target)
-    assert temp_repo.is_merging() is False
+
+    merge(temp_repo, target_ref)
+
+    # check that HEAD now points to a new merge commit 
+    merge_commit_ref = temp_repo.head_commit()
+    assert merge_commit_ref is not None
+
+    merge_commit = temp_repo.load_commit(merge_commit_ref.hash)
+
+    # check that the merge commit has two parents
+    assert len(merge_commit.parents) == 2
+    assert head in merge_commit.parents
+    assert target_ref in merge_commit.parents
+
+    # read the file after merge from the working directory
+    merged_lines = (temp_repo.working_dir / "file.txt").read_text().splitlines(keepends=True)
+    expected_lines = {"A\n", "B\n", "C\n"}
+
+    # check that all expected lines appear in the merged file
+    assert expected_lines.issubset(set(merged_lines))
+
+    # check that no extra lines were added by mistake
+    assert set(merged_lines).issubset(expected_lines)
+
+    # check that each line appears exactly once
+    for line in expected_lines:
+        assert merged_lines.count(line) == 1
+
 
 
 def test_merge_three_way_with_file_content_fails_cleanly(temp_repo):
