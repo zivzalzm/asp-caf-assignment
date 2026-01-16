@@ -93,4 +93,4 @@ def merge(repo: Repository, target: HashRef) -> MergeCase:
             raise NotImplementedError("Three-way merge is not implemented yet")
         except Exception as e:
             repo.abort_merge()
-            raise e
+            raise 

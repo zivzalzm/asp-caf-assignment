@@ -1,4 +1,3 @@
-import pytest
 import time
 from libcaf import Commit
 from libcaf.repository import Repository
@@ -53,16 +52,14 @@ def test_merge_three_way(temp_repo):
     right = HashRef(hash_object(commit))
     save_commit(temp_repo.objects_dir(), commit)
 
-    #assert result == MergeCase.THREE_WAY
-    with pytest.raises(NotImplementedError):
-        merge(temp_repo, right)
+    result = merge(temp_repo, right)
 
+    assert result == MergeCase.THREE_WAY
     assert temp_repo.is_merging() is False
     assert temp_repo.head_commit() == left
 
 
 def test_merge_three_way_clean_merge(temp_repo: Repository):
-
     (temp_repo.working_dir / "file1.txt").write_text("A\n")
     (temp_repo.working_dir / "file2.txt").write_text("X\n")
     base = temp_repo.commit_working_dir(author="Test Author", message="base")
@@ -77,7 +74,8 @@ def test_merge_three_way_clean_merge(temp_repo: Repository):
     target_ref = HashRef(hash_object(target_commit))
     save_commit(temp_repo.objects_dir(), target_commit)
 
-    merge(temp_repo, target_ref)
+    result = merge(temp_repo, target_ref)
+    assert result == MergeCase.THREE_WAY
 
     merge_commit_ref = temp_repo.head_commit()
     merge_commit = temp_repo.load_commit(merge_commit_ref.hash)
@@ -87,14 +85,12 @@ def test_merge_three_way_clean_merge(temp_repo: Repository):
     assert target_ref in merge_commit.parents
 
     file1_content = (temp_repo.working_dir / "file1.txt").read_text()
-    assert "A\nB\n" in file1_content
+    assert "A\nB\n" == file1_content
 
     file2_content = (temp_repo.working_dir / "file2.txt").read_text()
-    assert "X\nY\n" in file2_content
-
+    assert "X\nY\n" == file2_content
 
 def test_merge_three_way_with_file_content_fails_cleanly(temp_repo):
-
     (temp_repo.working_dir / "file.txt").write_text("base\n")
     base = temp_repo.commit_working_dir(author="Test Author", message="base")
 
@@ -108,9 +104,7 @@ def test_merge_three_way_with_file_content_fails_cleanly(temp_repo):
     target = HashRef(hash_object(target_commit))
     save_commit(temp_repo.objects_dir(), target_commit)
 
-    # Three-way merge should fail immediately
-    with pytest.raises(NotImplementedError):
-        merge(temp_repo, target)
+    result = merge(temp_repo, target)
+    assert result == MergeCase.THREE_WAY
 
-    # Repository must not remain in merge state
-    assert temp_repo.is_merging() is False
+    assert temp_repo.is_merging() is True

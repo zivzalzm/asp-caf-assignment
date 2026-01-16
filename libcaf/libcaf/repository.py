@@ -611,10 +611,10 @@ class Repository:
         return merge_dir.exists()
 
     @requires_repo
-    def _exit_merge_state(self, *, error_msg: str) -> None:
+    def _exit_merge_state(self, *, error_msg: str) -> bool:
         """Exit the merge-in-progress state.
 
-        This is a private helper that removes the merge state marker from the repository. 
+        This is a private helper that removes the merge state marker from the repository.
 
         :param error_msg: Error message to raise if no merge is in progress.
         :raises RepositoryError: If no merge is currently in progress.
@@ -622,9 +622,10 @@ class Repository:
         merge_dir = self.repo_path() / MERGE_DIR
 
         if not merge_dir.exists():
-            raise RepositoryError(error_msg)
+            return False
 
         shutil.rmtree(merge_dir)
+        return True
 
     @requires_repo
     def abort_merge(self) -> None:
