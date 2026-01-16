@@ -17,6 +17,8 @@ def test_merge_disconnected_histories(temp_repo):
     result = merge(temp_repo, root2_ref)
     assert result == MergeCase.DISCONNECTED
     assert temp_repo.head_commit() == child1
+    assert temp_repo.is_merging() is False
+
 
 def test_merge_up_to_date(temp_repo):
     root_target = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -25,6 +27,8 @@ def test_merge_up_to_date(temp_repo):
     result = merge(temp_repo, root_target)
     assert result == MergeCase.UP_TO_DATE
     assert temp_repo.head_commit() == child_head
+    assert temp_repo.is_merging() is False
+
 
 def test_merge_fast_forward(temp_repo):
     root_head = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -36,6 +40,8 @@ def test_merge_fast_forward(temp_repo):
     result = merge(temp_repo, child_target_ref)
     assert result == MergeCase.FAST_FORWARD
     assert temp_repo.head_commit() == child_target_ref
+    assert temp_repo.is_merging() is False
+
 
 def test_merge_three_way(temp_repo):
     base = temp_repo.commit_working_dir(author="Test Author", message="A")
@@ -47,5 +53,58 @@ def test_merge_three_way(temp_repo):
     save_commit(temp_repo.objects_dir(), commit)
 
     result = merge(temp_repo, right)
+
     assert result == MergeCase.THREE_WAY
+    assert temp_repo.is_merging() is False
     assert temp_repo.head_commit() == left
+
+
+def test_merge_three_way_clean_merge(temp_repo: Repository):
+    (temp_repo.working_dir / "file1.txt").write_text("A\n")
+    (temp_repo.working_dir / "file2.txt").write_text("X\n")
+    base = temp_repo.commit_working_dir(author="Test Author", message="base")
+
+    (temp_repo.working_dir / "file1.txt").write_text("A\nB\n")
+    head = temp_repo.commit_working_dir(author="Test Author", message="head")
+
+    (temp_repo.working_dir / "file2.txt").write_text("X\nY\n")
+    tree_hash = temp_repo.save_dir(temp_repo.working_dir)
+
+    target_commit = Commit(tree_hash=tree_hash, author="Test Author", message="target", timestamp=int(time.time()), parents=[base])
+    target_ref = HashRef(hash_object(target_commit))
+    save_commit(temp_repo.objects_dir(), target_commit)
+
+    result = merge(temp_repo, target_ref)
+    assert result == MergeCase.THREE_WAY
+
+    merge_commit_ref = temp_repo.head_commit()
+    merge_commit = temp_repo.load_commit(merge_commit_ref.hash)
+
+    assert len(merge_commit.parents) == 2
+    assert head in merge_commit.parents
+    assert target_ref in merge_commit.parents
+
+    file1_content = (temp_repo.working_dir / "file1.txt").read_text()
+    assert "A\nB\n" == file1_content
+
+    file2_content = (temp_repo.working_dir / "file2.txt").read_text()
+    assert "X\nY\n" == file2_content
+
+def test_merge_three_way_with_file_content_fails_cleanly(temp_repo):
+    (temp_repo.working_dir / "file.txt").write_text("base\n")
+    base = temp_repo.commit_working_dir(author="Test Author", message="base")
+
+    (temp_repo.working_dir / "file.txt").write_text("head version\n")
+    head = temp_repo.commit_working_dir(author="Test Author", message="head")
+
+    (temp_repo.working_dir / "file.txt").write_text("target version\n")
+    tree_hash = temp_repo.save_dir(temp_repo.working_dir)
+
+    target_commit = Commit(tree_hash, "Test Author", "target", int(time.time()), [base])
+    target = HashRef(hash_object(target_commit))
+    save_commit(temp_repo.objects_dir(), target_commit)
+
+    result = merge(temp_repo, target)
+    assert result == MergeCase.THREE_WAY
+
+    assert temp_repo.is_merging() is True
